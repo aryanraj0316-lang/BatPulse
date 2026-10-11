@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Bats View",
+    "slug": "bats-view",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#040711"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#040711"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
