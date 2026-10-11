@@ -2,13 +2,29 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import { GAME_CONFIG } from '../constants/gameConfig';
 import { PALETTE } from '../constants/palette';
+import { DEBUG_ENABLED, DebugFlags, useDebugFlags } from '../debug/debugFlags';
 
 interface DevPanelProps {
   visible: boolean;
   onClose: () => void;
+  /** Debug level jump: starts the given level immediately (0 = data-file test level). */
+  onJumpToLevel?: (levelId: number) => void;
 }
 
-export const DevPanel: React.FC<DevPanelProps> = ({ visible, onClose }) => {
+const TOGGLES: { key: keyof DebugFlags; label: string }[] = [
+  { key: 'unlimitedShards', label: 'Unlimited shards' },
+  { key: 'showHitboxes', label: 'Show hitboxes' },
+  { key: 'showHearing', label: 'Show enemy hearing radius' },
+  { key: 'showFps', label: 'FPS counter' },
+  { key: 'slowMotion', label: 'Slow motion (0.3x)' },
+];
+
+export const DevPanel: React.FC<DevPanelProps> = ({ visible, onClose, onJumpToLevel }) => {
+  const flags = useDebugFlags();
+  const [jumpLevel, setJumpLevel] = useState(0);
+  // Debug tooling never exists in release builds.
+  if (!DEBUG_ENABLED) return null;
+
   const [wraithSpeedRatio, setWraithSpeedRatio] = useState(GAME_CONFIG.HUNTER_SPEED_RATIO);
   const [sonarRadius, setSonarRadius] = useState(GAME_CONFIG.SONAR_RADIUS);
   const [hearingRadius, setHearingRadius] = useState(GAME_CONFIG.HUNTER_HEARING_RADIUS);
@@ -27,6 +43,41 @@ export const DevPanel: React.FC<DevPanelProps> = ({ visible, onClose }) => {
           <Text style={styles.title}>ENGINE TUNING PANEL</Text>
 
           <ScrollView style={styles.scroll}>
+            {/* Level jump */}
+            <View style={styles.row}>
+              <Text style={styles.label}>Level jump: {jumpLevel === 0 ? 'TEST' : `Echo ${String(jumpLevel).padStart(2, '0')}`}</Text>
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={styles.adjustBtn} onPress={() => setJumpLevel((v) => Math.max(0, v - 1))}>
+                  <Text style={styles.btnTxt}>-</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.adjustBtn} onPress={() => setJumpLevel((v) => Math.min(50, v + 1))}>
+                  <Text style={styles.btnTxt}>+</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.adjustBtn, { width: 44 }]}
+                  onPress={() => {
+                    onClose();
+                    onJumpToLevel?.(jumpLevel);
+                  }}
+                >
+                  <Text style={styles.btnTxt}>GO</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Debug toggles */}
+            {TOGGLES.map((t) => (
+              <View key={t.key} style={styles.row}>
+                <Text style={styles.label}>{t.label}</Text>
+                <TouchableOpacity
+                  style={[styles.adjustBtn, { width: 44 }, flags[t.key] && { backgroundColor: PALETTE.sonarCyan }]}
+                  onPress={() => flags.set(t.key, !flags[t.key])}
+                >
+                  <Text style={[styles.btnTxt, { fontSize: 11 }, flags[t.key] && { color: '#000' }]}>{flags[t.key] ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
             {/* Wraith Speed */}
             <View style={styles.row}>
               <Text style={styles.label}>Wraith Speed: {wraithSpeedRatio.toFixed(2)}×</Text>
@@ -120,7 +171,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scroll: {
-    maxHeight: 240,
+    maxHeight: 380,
   },
   row: {
     flexDirection: 'row',

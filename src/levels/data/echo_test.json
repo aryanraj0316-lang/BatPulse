@@ -1,0 +1,30 @@
+{
+  "id": 0,
+  "name": "Test Chamber",
+  "chapter": 1,
+  "width": 380,
+  "height": 660,
+  "start": { "x": 190, "y": 560 },
+  "finish": { "x": 320, "y": 70, "radius": 18 },
+  "walls": [
+    { "x": 0, "y": 0, "width": 380, "height": 8, "type": "normal" },
+    { "x": 0, "y": 652, "width": 380, "height": 8, "type": "normal" },
+    { "x": 0, "y": 0, "width": 8, "height": 660, "type": "normal" },
+    { "x": 372, "y": 0, "width": 8, "height": 660, "type": "normal" },
+    { "x": 8, "y": 420, "width": 260, "height": 8, "type": "normal" },
+    { "x": 112, "y": 220, "width": 260, "height": 8, "type": "normal" }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [],
+  "checkpoints": [],
+  "sonar": { "mode": "recharge", "charges": 3, "rechargeSec": 2 },
+  "ghostPulseLimit": 4,
+  "parTime": 25,
+  "starThresholds": { "two": 40, "three": 25 },
+  "escape": { "enabled": false, "wallSpeed": 0 },
+  "hint": "Phase 0 data-file test level."
+}

@@ -6,12 +6,19 @@ import { MazeMesher } from '../maze/mesher';
 import { Pathfinding, NodeCoord } from '../maze/pathfinding';
 import { LEVEL_PRESETS, LevelPreset } from './params';
 import { GAME_CONFIG } from '../constants/gameConfig';
+import { loadAuthoredLevel } from './loader';
+import { toRuntimeLevel } from './adapter';
 
 export class LevelFactory {
   /**
    * Generates a complete LevelData structure from a seed and level index.
    */
   static createLevel(levelId: number, customSeed?: number, worldW?: number, worldH?: number): LevelData {
+    // Authored data files take priority over procedural generation.
+    const authored = loadAuthoredLevel(levelId);
+    if (authored) {
+      return toRuntimeLevel(authored, worldW || GAME_CONFIG.WORLD_WIDTH, worldH || GAME_CONFIG.WORLD_HEIGHT);
+    }
     const preset =
       LEVEL_PRESETS.find((p) => p.id === levelId) || this.createProceduralPreset(levelId);
 

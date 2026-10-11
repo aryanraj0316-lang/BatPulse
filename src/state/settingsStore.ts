@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { saveManager } from '../save';
+import { defaultSave } from '../save/schema';
 
 interface SettingsState {
   soundEnabled: boolean;
@@ -10,35 +12,30 @@ interface SettingsState {
   setHapticsEnabled: (val: boolean) => void;
   setFloatingJoystick: (val: boolean) => void;
   unlockDevMode: () => void;
+  /** Replaces in-memory state with the loaded save. Call once after saveManager.load(). */
+  hydrate: () => void;
 }
 
-const STORAGE_KEY = 'bats_view_v2_settings';
-
-const loadSavedSettings = (): Partial<SettingsState> => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const data = window.localStorage.getItem(STORAGE_KEY);
-      if (data) return JSON.parse(data);
-    }
-  } catch {}
-  return {};
-};
-
 const saveSettings = (state: SettingsState) => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-  } catch {}
+  saveManager.mutate((d) => {
+    d.settings = {
+      soundEnabled: state.soundEnabled,
+      hapticsEnabled: state.hapticsEnabled,
+      floatingJoystick: state.floatingJoystick,
+      devModeUnlocked: state.devModeUnlocked,
+    };
+  });
 };
 
-const initial = loadSavedSettings();
+const initial = defaultSave().settings;
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   soundEnabled: initial.soundEnabled ?? true,
   hapticsEnabled: initial.hapticsEnabled ?? true,
   floatingJoystick: initial.floatingJoystick ?? true,
   devModeUnlocked: initial.devModeUnlocked ?? false,
+
+  hydrate: () => set({ ...saveManager.data.settings }),
 
   setSoundEnabled: (val) => {
     set((state) => {

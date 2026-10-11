@@ -4,6 +4,7 @@ import Svg, { Path, Circle, Line, Polygon, Rect } from 'react-native-svg';
 import { EnvObject, Rect as WallRect, Vec2, GhostPoint } from '../../types/game';
 import { RevealSystem } from '../../engine/RevealSystem';
 import { PALETTE } from '../../constants/palette';
+import { AssetRegistry } from '../../assets/AssetRegistry';
 
 interface GeometryLayerProps {
   walls: WallRect[];
@@ -78,6 +79,9 @@ export const GeometryLayer: React.FC<GeometryLayerProps> = ({
     }
   }
 
+  const wallStyle = AssetRegistry.getWallStyle('wall_normal');
+  const Finish = AssetRegistry.getVisual('finish');
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width={worldWidth} height={worldHeight}>
@@ -106,30 +110,30 @@ export const GeometryLayer: React.FC<GeometryLayerProps> = ({
         {echoPath.length > 0 && (
           <Path
             d={echoPath}
-            stroke={PALETTE.memoryDust}
-            strokeWidth={1.0}
-            fill="none"
-            opacity={0.35}
+            stroke={wallStyle.echo.stroke}
+            strokeWidth={wallStyle.echo.width}
+            fill={wallStyle.echo.fill}
+            opacity={wallStyle.echo.opacity}
           />
         )}
 
         {fadingPath.length > 0 && (
           <Path
             d={fadingPath}
-            stroke={PALETTE.echoTeal}
-            strokeWidth={1.5}
-            fill="rgba(12, 22, 36, 0.3)"
-            opacity={0.65}
+            stroke={wallStyle.fading.stroke}
+            strokeWidth={wallStyle.fading.width}
+            fill={wallStyle.fading.fill}
+            opacity={wallStyle.fading.opacity}
           />
         )}
 
         {freshPath.length > 0 && (
           <Path
             d={freshPath}
-            stroke={PALETTE.sonarCyan}
-            strokeWidth={2.0}
-            fill="rgba(12, 22, 36, 0.55)"
-            opacity={0.95}
+            stroke={wallStyle.fresh.stroke}
+            strokeWidth={wallStyle.fresh.width}
+            fill={wallStyle.fresh.fill}
+            opacity={wallStyle.fresh.opacity}
           />
         )}
 
@@ -246,21 +250,14 @@ export const GeometryLayer: React.FC<GeometryLayerProps> = ({
 
         {/* 4. Goal Extraction Beacon */}
         {goalVis.opacity > 0.01 && (
-          <React.Fragment>
-            <Circle cx={goal.x} cy={goal.y} r={goal.radius * 1.8} fill="rgba(180, 125, 255, 0.2)" opacity={goalVis.opacity} />
-            <Circle
-              cx={goal.x}
-              cy={goal.y}
-              r={goal.radius}
-              stroke={PALETTE.goalViolet}
-              strokeWidth={goalVis.strokeWidth}
-              strokeDasharray="6, 3"
-              fill="none"
-              opacity={goalVis.opacity}
-            />
-            <Circle cx={goal.x} cy={goal.y} r={goal.radius * 0.5} stroke="#FFFFFF" strokeWidth={1.5} fill="none" opacity={goalVis.opacity} />
-            <Circle cx={goal.x} cy={goal.y} r={4} fill={PALETTE.goalViolet} opacity={goalVis.opacity} />
-          </React.Fragment>
+          <Finish
+            x={goal.x}
+            y={goal.y}
+            width={goal.radius * 2}
+            height={goal.radius * 2}
+            glow={goalVis.opacity}
+            time={now / 1000}
+          />
         )}
       </Svg>
     </View>

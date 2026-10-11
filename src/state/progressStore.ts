@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { LevelRecord, AbilityId, AbilityInfo, GhostPoint } from '../types/game';
+import { saveManager } from '../save';
+import { getDebugFlags } from '../debug/debugFlags';
+import { Analytics } from '../analytics/Analytics';
+import { defaultSave } from '../save/schema';
 
 export const ABILITIES: Record<AbilityId, AbilityInfo> = {
   WIDE_PULSE: {
@@ -47,6 +51,7 @@ interface ProgressState {
   endlessHighScore: number;
   dailyBestDepth: number;
   hasSeenHeadphonePrompt: boolean;
+  selectedCharacter: string;
 
   // Actions
   addShards: (amount: number) => void;
@@ -63,38 +68,25 @@ interface ProgressState {
   toggleEquipAbility: (id: AbilityId) => void;
   recordEndlessScore: (depth: number) => boolean;
   setHeadphonePromptSeen: () => void;
+  /** Replaces in-memory state with the loaded save. Call once after saveManager.load(). */
+  hydrate: () => void;
 }
 
-const STORAGE_KEY = 'bats_view_v2_progress';
-
-const loadSavedState = (): Partial<ProgressState> => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const data = window.localStorage.getItem(STORAGE_KEY);
-      if (data) return JSON.parse(data);
-    }
-  } catch {}
-  return {};
-};
-
+/** Copies the persisted slice of the store into the central save (versioned, backed up). */
 const saveState = (state: ProgressState) => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const data = JSON.stringify({
-        shards: state.shards,
-        records: state.records,
-        equippedAbilities: state.equippedAbilities,
-        unlockedAbilities: state.unlockedAbilities,
-        endlessHighScore: state.endlessHighScore,
-        dailyBestDepth: state.dailyBestDepth,
-        hasSeenHeadphonePrompt: state.hasSeenHeadphonePrompt,
-      });
-      window.localStorage.setItem(STORAGE_KEY, data);
-    }
-  } catch {}
+  saveManager.mutate((d) => {
+    d.shards = state.shards;
+    d.records = state.records;
+    d.equippedAbilities = state.equippedAbilities;
+    d.unlockedAbilities = state.unlockedAbilities;
+    d.endlessHighScore = state.endlessHighScore;
+    d.dailyBestDepth = state.dailyBestDepth;
+    d.hasSeenHeadphonePrompt = state.hasSeenHeadphonePrompt;
+    d.selectedCharacter = state.selectedCharacter;
+  });
 };
 
-const initialSaved = loadSavedState();
+const initialSaved = defaultSave();
 
 export const useProgressStore = create<ProgressState>((set, get) => ({
   shards: initialSaved.shards ?? 0,
@@ -106,6 +98,21 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   endlessHighScore: initialSaved.endlessHighScore ?? 0,
   dailyBestDepth: initialSaved.dailyBestDepth ?? 0,
   hasSeenHeadphonePrompt: initialSaved.hasSeenHeadphonePrompt ?? false,
+  selectedCharacter: initialSaved.selectedCharacter ?? 'bat_rookie',
+
+  hydrate: () => {
+    const d = saveManager.data;
+    set({
+      shards: d.shards,
+      records: d.records,
+      equippedAbilities: d.equippedAbilities,
+      unlockedAbilities: d.unlockedAbilities,
+      endlessHighScore: d.endlessHighScore,
+      dailyBestDepth: d.dailyBestDepth,
+      hasSeenHeadphonePrompt: d.hasSeenHeadphonePrompt,
+      selectedCharacter: d.selectedCharacter,
+    });
+  },
 
   addShards: (amount) => {
     set((state) => {
@@ -183,17 +190,19 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   unlockAbility: (id) => {
     const state = get();
     const info = ABILITIES[id];
-    if (!info || state.shards < info.cost || state.unlockedAbilities.includes(id)) {
+    const free = getDebugFlags().unlimitedShards; // debug builds only
+    if (!info || (!free && state.shards < info.cost) || state.unlockedAbilities.includes(id)) {
       return false;
     }
 
     const nextState = {
       ...state,
-      shards: state.shards - info.cost,
+      shards: free ? state.shards : state.shards - info.cost,
       unlockedAbilities: [...state.unlockedAbilities, id],
     };
     saveState(nextState);
     set(nextState);
+    if (!free) Analytics.track({ name: 'shard_spent', amount: info.cost, item: id });
     return true;
   },
 

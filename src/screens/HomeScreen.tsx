@@ -5,6 +5,7 @@ import { PALETTE } from '../constants/palette';
 import { useProgressStore } from '../state/progressStore';
 import { useSettingsStore } from '../state/settingsStore';
 import { DevPanel } from '../components/DevPanel';
+import { DEBUG_ENABLED } from '../debug/debugFlags';
 import { DEV_KEYS } from '../constants/gameConfig';
 import { AudioEngine } from '../engine/AudioEngine';
 
@@ -51,6 +52,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const totalStars = Object.values(records).reduce((sum, r) => sum + (r.stars || 0), 0);
 
   const handleVersionTap = () => {
+    if (!DEBUG_ENABLED) return; // dev tools are stripped from release builds
     const next = tapCount + 1;
     setTapCount(next);
     if (next >= DEV_KEYS.TAP_COUNT_TO_UNLOCK_DEV) {
@@ -150,12 +152,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* Version Tag */}
       <TouchableOpacity style={styles.footer} onPress={handleVersionTap} activeOpacity={0.9}>
         <Text style={styles.versionText}>
-          SEC-SYS PROTOCOL 2.0.4 {devModeUnlocked ? '· [DEV TUNING ACTIVE]' : ''}
+          SEC-SYS PROTOCOL 2.0.4 {DEBUG_ENABLED && devModeUnlocked ? '· [DEV TUNING ACTIVE]' : ''}
         </Text>
       </TouchableOpacity>
 
       {/* Live Engine Tuning Panel */}
-      {devPanelOpen && <DevPanel visible={devPanelOpen} onClose={() => setDevPanelOpen(false)} />}
+      {DEBUG_ENABLED && devPanelOpen && (
+        <DevPanel visible={devPanelOpen} onClose={() => setDevPanelOpen(false)} onJumpToLevel={onPlay} />
+      )}
     </View>
   );
 };

@@ -47,6 +47,100 @@ export const GAME_CONFIG = {
   WORLD_HEIGHT: 660,
 };
 
+/**
+ * Spec-driven tunables (Echo Location rebuild). Everything gameplay-related that a designer
+ * might tweak lives here; systems read these values and never hard-code numbers.
+ * Times are in seconds unless the key says Ms.
+ */
+export const ECHO_CONFIG = {
+  sonar: {
+    defaultCharges: 3,
+    defaultRechargeSec: 4,
+    tutorialRechargeSec: 2, // Echo 01-05
+    tutorialLevelMax: 5,
+    maxRadiusScreenFraction: 0.4, // of screen width
+    edgeFalloff: 0.35, // 0..1 – share of the radius over which the wave fades out
+    revealGlowSec: 1.5,
+    expandSec: 0.32,
+    minTapGapMs: 120, // debounce for very fast taps
+    buttonMinDp: 64,
+  },
+  player: {
+    speed: 185, // px / s
+    acceleration: 16,
+    deceleration: 12,
+    turnRate: 0.25, // fraction of remaining angle closed per frame
+    joystickDeadZone: 0.1,
+    joystickRadius: 50,
+    radius: 14,
+  },
+  momentum: {
+    start: 1.0,
+    step: 0.1,
+    intervalSec: 2,
+    max: 2.0,
+    idleResetSec: 1.5,
+    resetOnWallHit: true,
+  },
+  death: {
+    shakeSec: 0.3,
+    restartDelaySec: 1.0,
+  },
+  rewards: {
+    starShards: { 1: 20, 2: 35, 3: 50 } as Record<number, number>,
+    ghostRunBonus: 25,
+    momentumBonusPerStep: 2, // shards per 0.1 of momentum above x1.0 at finish
+    replayFactor: 0.25, // replays pay this share of a first clear
+    dailyLoginMin: 50,
+    dailyLoginMax: 100,
+    dailyStreakBonus: 100, // on day 7 of a streak
+    dailyStreakDays: 7,
+  },
+  enemy: {
+    hearingRadiusMult: 1.2, // x pulse radius
+    spawnSafeSec: 3,
+    slowHunterSpeedMult: 0.85, // vs player's max speed
+    fastHunterSpeedMult: 1.0,
+    visibleOnHitSec: 1,
+    alertToChaseSec: 1.5,
+    lostSearchSec: 4,
+    threatRadiusTiles: 5,
+    chaseRadiusTiles: 1.5,
+  },
+  door: {
+    openSec: 8,
+  },
+  hazards: {
+    sliderLoopSecMin: 2,
+    sliderLoopSecMax: 4,
+  },
+  characters: {
+    bat_rookie: { name: 'The Rookie', price: 0, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_vesper: { name: 'Vesper', price: 1500, glowBonusSec: 2, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_sonarbot: { name: 'Sonar-Bot', price: 3500, glowBonusSec: 0, radiusMult: 1.5, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_phantom: { name: 'Phantom', price: 6000, glowBonusSec: 0, radiusMult: 1, hearingMult: 0.5, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_turbo: { name: 'Turbo Moth', price: 10000, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 2, momentumCap: 4.0 },
+  } as Record<string, CharacterStats>,
+  perf: {
+    targetFps: 60,
+    minAcceptableFps: 50, // low-end device floor
+    frameBudgetMs: 1000 / 60,
+  },
+  level: {
+    loadBudgetMs: 1000,
+  },
+};
+
+export interface CharacterStats {
+  name: string;
+  price: number;
+  glowBonusSec: number;
+  radiusMult: number;
+  hearingMult: number;
+  momentumRateMult: number;
+  momentumCap: number;
+}
+
 export const DEV_KEYS = {
   TAP_COUNT_TO_UNLOCK_DEV: 5,
 };

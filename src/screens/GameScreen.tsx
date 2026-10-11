@@ -7,6 +7,7 @@ import {
   Pressable,
   Text,
   Platform,
+  AppState,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import {
@@ -37,6 +38,9 @@ import { useSettingsStore } from '../state/settingsStore';
 import { GameCanvas } from '../render/GameCanvas';
 import { HUD } from '../components/HUD';
 import { ResultCard } from '../components/ResultCard';
+import { DebugOverlay } from '../debug/DebugOverlay';
+import { debugTimeScale, getDebugFlags } from '../debug/debugFlags';
+import { Analytics, FailCause } from '../analytics/Analytics';
 
 interface GameScreenProps {
   levelId: number;
@@ -75,6 +79,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const [scoreResult, setScoreResult] = useState<ScoreBreakdown | null>(null);
   const [shardsEarned, setShardsEarned] = useState(0);
   const [isRedStatic, setIsRedStatic] = useState(false);
+  const [fps, setFps] = useState(60);
 
   // Joystick visual state (starts down in the bottom-right corner)
   const [joyCenter, setJoyCenter] = useState<Vec2>({ x: SW - 75, y: SH - 85 });
@@ -103,6 +108,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const rafRef = useRef<number | null>(null);
   const pausedRef = useRef(false);
   const wonRef = useRef(false);
+  const fpsRef = useRef({ frames: 0, since: Date.now() });
 
   // Level init
   const initLevel = useCallback(() => {
@@ -171,6 +177,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     setScoreResult(null);
     setShardsEarned(0);
     setIsRedStatic(false);
+    Analytics.track({ name: 'level_start', levelId: level.id });
     setJoyActive(false);
     setJoyKnob({ x: 0, y: 0 });
   }, [level]);
@@ -183,12 +190,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     };
   }, [initLevel]);
 
-  const triggerRestart = useCallback(() => {
+  const triggerRestart = useCallback((cause: FailCause = 'enemy') => {
     runningRef.current = false;
+    Analytics.track({ name: 'level_fail', levelId: level.id, cause });
     HapticEngine.death(hapticsEnabled);
     setIsRedStatic(true);
     setTimeout(() => initLevel(), 250);
-  }, [hapticsEnabled, initLevel]);
+  }, [hapticsEnabled, initLevel, level.id]);
 
   // Elapsed timer
   useEffect(() => {
@@ -201,6 +209,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   }, []);
 
   useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
+
+  // Backgrounding mid-level (home button, phone call, app switch) pauses the run.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active' && runningRef.current && !wonRef.current) setIsPaused(true);
+    });
+    return () => sub.remove();
+  }, []);
   useEffect(() => { wonRef.current = isWon; }, [isWon]);
 
   // Sonar Ping Function
@@ -359,7 +375,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       }
 
       const now = Date.now();
-      const dt = Math.min(0.04, (now - lastFrameRef.current) / 1000);
+      const rawDt = Math.min(0.04, (now - lastFrameRef.current) / 1000);
+      const dbg = getDebugFlags();
+      const dt = rawDt * debugTimeScale(dbg);
+      if (dbg.showFps) {
+        const f = fpsRef.current;
+        f.frames++;
+        if (now - f.since >= 500) {
+          setFps(Math.round((f.frames * 1000) / (now - f.since)));
+          f.frames = 0;
+          f.since = now;
+        }
+      }
       lastFrameRef.current = now;
 
       const p = playerRef.current;
@@ -409,7 +436,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
       // 3. Environmental Interactions
       if (CollisionSystem.checkChasmFall(p.pos, p.radius, objectsRef.current)) {
-        triggerRestart();
+        triggerRestart('fall');
         return;
       }
       if (CollisionSystem.checkShardCollection(p.pos, p.radius, objectsRef.current)) {
@@ -457,6 +484,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           sc.perfectEchoBonus > 0,
           trackRef.current
         );
+
+        Analytics.track({ name: 'level_complete', levelId: level.id, timeSec: elapsedRef.current, stars: sc.stars, pulses: used, momentum: p.momentum });
+        Analytics.track({ name: 'pulses_used', levelId: level.id, count: used });
+        if (ghostRef.current) Analytics.track({ name: 'ghost_run', levelId: level.id });
+        if (rec.shardsEarned > 0) Analytics.track({ name: 'shard_earned', amount: rec.shardsEarned, source: `level_${level.id}` });
 
         setScoreResult(sc);
         setShardsEarned(rec.shardsEarned);
@@ -538,7 +570,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         HunterAI.update(wraith, openGrid, cW, cH, dt, now);
         if (wraith.state === 'FRENZY') anyFrenzy = true;
         if (Math.hypot(wraith.pos.x - p.pos.x, wraith.pos.y - p.pos.y) < wraith.radius + p.radius) {
-          triggerRestart();
+          triggerRestart('enemy');
           return;
         }
       }
@@ -590,6 +622,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           />
         )}
       </View>
+
+      {/* Debug overlays (hitboxes, hearing radius, FPS) - dev builds only */}
+      {p && (
+        <DebugOverlay
+          width={SW}
+          height={SH}
+          player={p}
+          walls={wallsRef.current}
+          objects={objectsRef.current}
+          wraiths={wraithsRef.current}
+          fps={fps}
+        />
+      )}
 
       {/* 2. FLOATING JOYSTICK VISUAL OVERLAY (Full Screen, pointerEvents="none") */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">

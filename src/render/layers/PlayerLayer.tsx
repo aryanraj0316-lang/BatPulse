@@ -1,8 +1,11 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import Svg, { Circle, Path, Polygon } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { PlayerEntity } from '../../types/game';
 import { PALETTE } from '../../constants/palette';
+import { AssetRegistry } from '../../assets/AssetRegistry';
+import { VisualKey } from '../../assets/keys';
+import { useProgressStore } from '../../state/progressStore';
 
 interface PlayerLayerProps {
   player: PlayerEntity;
@@ -11,6 +14,8 @@ interface PlayerLayerProps {
 }
 
 export const PlayerLayer: React.FC<PlayerLayerProps> = ({ player, worldWidth, worldHeight }) => {
+  const batKey = useProgressStore((st) => st.selectedCharacter) as VisualKey;
+  const Bat = AssetRegistry.getVisual(batKey);
   const rotationDeg = (player.rotation * 180) / Math.PI + 90;
   const diameter = player.radius * 2;
 
@@ -56,19 +61,15 @@ export const PlayerLayer: React.FC<PlayerLayerProps> = ({ player, worldWidth, wo
           opacity={0.4}
         />
 
-        {/* Directional Beacon Cone & Bat Silhouette */}
-        <Path
-          d="M16 8 C12 2 4 4 2 12 C6 13 10 11 12 15 C14 18 15 24 16 26 C17 24 18 18 20 15 C22 11 26 13 30 12 C28 4 20 2 16 8 Z"
-          fill={PALETTE.playerWarm}
-          transform={`translate(${player.pos.x - 16}, ${player.pos.y - 16}) rotate(${rotationDeg}, 16, 16) scale(${player.scale})`}
-        />
-
-        {/* Player Core Eye */}
-        <Circle
-          cx={player.pos.x}
-          cy={player.pos.y}
-          r={2.5}
-          fill="#FFFFFF"
+        {/* Bat (placeholder or final art, resolved by key). Wings flap at ~8 Hz while moving. */}
+        <Bat
+          x={player.pos.x}
+          y={player.pos.y}
+          width={diameter * 2.2 * player.scale}
+          height={diameter * 2.2 * player.scale}
+          rotation={rotationDeg}
+          frame={player.isMoving && Math.floor(Date.now() / 60) % 2 === 1 ? 1 : 0}
+          state="idle"
         />
       </Svg>
     </View>
