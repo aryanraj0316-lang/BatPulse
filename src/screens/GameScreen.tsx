@@ -141,8 +141,22 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
         case 'death':
           audio.play('sfx_death');
           HapticEngine.death(haptics);
-          Analytics.track({ name: 'level_fail', levelId: def.id, cause: 'spike' });
+          Analytics.track({ name: 'level_fail', levelId: def.id, cause: sim.failCause ?? 'spike' });
           Analytics.track({ name: 'pulses_used', levelId: def.id, count: sim.pulsesUsed });
+          break;
+        case 'switch':
+          audio.play('sfx_switch');
+          HapticEngine.wallBump(haptics);
+          break;
+        case 'door_open':
+          audio.play('sfx_door');
+          break;
+        case 'door_close':
+          audio.play('sfx_door', 0.5);
+          break;
+        case 'pickup':
+          audio.play('sfx_switch', 0.8); // no dedicated pickup sound key: the switch click doubles as the chime
+          HapticEngine.shardPickup(haptics);
           break;
         case 'finish': {
           audio.play('sfx_finish');

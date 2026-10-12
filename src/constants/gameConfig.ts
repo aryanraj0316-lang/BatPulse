@@ -64,10 +64,14 @@ export const ECHO_CONFIG = {
   },
   door: {
     openSec: 8,
+    switchLosEnabled: true, // a pulse must have a clear line to the switch to trigger it
   },
+  pickup: { radius: 10 },
+  switch: { radius: 14 },
   hazards: {
     sliderLoopSecMin: 2,
     sliderLoopSecMax: 4,
+    bladeThickness: 8, // width of each blade arm
     spikeForgiveness: 2, // px the spike hitbox is shrunk by, so touching a tip is not instant death
   },
   surfaces: {

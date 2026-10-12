@@ -156,7 +156,7 @@ const HazardBlade: React.FC<VisualProps> = (p) => {
   const len = Math.max(p.width, p.height);
   const t = 5;
   return (
-    <G transform={`translate(${p.x} ${p.y}) rotate(${(p.time ?? 0) * 180})`} opacity={glowOf(p)}>
+    <G transform={`translate(${p.x} ${p.y}) rotate(${p.rotation ?? (p.time ?? 0) * 180})`} opacity={glowOf(p)}>
       <Rect x={-len / 2} y={-t / 2} width={len} height={t} fill="#FF8A1F" stroke="#FFD2A1" strokeWidth={1} />
       <Rect x={-t / 2} y={-len / 2} width={t} height={len} fill="#FF8A1F" stroke="#FFD2A1" strokeWidth={1} />
       <Circle r={t} fill="#FFD2A1" />

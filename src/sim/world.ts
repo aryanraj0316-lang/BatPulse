@@ -1,13 +1,15 @@
-import { LevelDef, WallType } from '../levels/schema';
+import { DoorDef, LevelDef, MovingHazardDef, PickupDef, SwitchDef, WallType } from '../levels/schema';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { Box } from './collision';
 
-export type RevealKind = 'wall' | 'spike' | 'finish';
+export type RevealKind = 'wall' | 'spike' | 'finish' | 'hazard' | 'switch' | 'door' | 'pickup';
 
 /** Something a pulse can light up. Static: built once per level load. */
 export interface Revealable extends Box {
   kind: RevealKind;
   variant: WallType; // wall surface; 'normal' for non-walls
+  /** Index into the matching world list (hazards / switches / doors / pickups). */
+  ref?: number;
 }
 
 export interface World {
@@ -19,6 +21,12 @@ export interface World {
   /** Everything revealable (long walls are split into short pieces so a pulse only lights what it reaches). */
   revealables: Revealable[];
   finish: { x: number; y: number; radius: number };
+  hazards: MovingHazardDef[];
+  switches: SwitchDef[];
+  /** Index of the switch each door listens to (parallel to doors). */
+  doors: DoorDef[];
+  doorSwitch: number[];
+  pickups: PickupDef[];
 }
 
 /** Splits a box along its longer axis into pieces no longer than maxLen. */
@@ -67,6 +75,13 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
     // spikes are drawn whole (filled triangles), so they are only cut along their length
     for (const seg of segments(s, segmentLen)) revealables.push({ ...seg, kind: 'spike', variant: 'normal' });
   }
+  // doors, switches, pickups and moving hazards are revealable too (hazards are re-positioned every step)
+  def.movingHazards.forEach((h, i) => revealables.push({ x: h.x, y: h.y, width: h.width, height: h.height, kind: 'hazard', variant: 'normal', ref: i }));
+  const sr = ECHO_CONFIG.switch.radius;
+  def.switches.forEach((sw, i) => revealables.push({ x: sw.x - sr, y: sw.y - sr, width: sr * 2, height: sr * 2, kind: 'switch', variant: 'normal', ref: i }));
+  def.doors.forEach((d, i) => revealables.push({ x: d.x, y: d.y, width: d.width, height: d.height, kind: 'door', variant: 'normal', ref: i }));
+  const pr = ECHO_CONFIG.pickup.radius;
+  def.pickups.forEach((p, i) => revealables.push({ x: p.x - pr, y: p.y - pr, width: pr * 2, height: pr * 2, kind: 'pickup', variant: 'normal', ref: i }));
   const finish = { x: def.finish.x, y: def.finish.y, radius: def.finish.radius ?? 18 };
   revealables.push({
     x: finish.x - finish.radius,
@@ -76,7 +91,19 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
     kind: 'finish',
     variant: 'normal',
   });
-  return { def, solids, spikes, revealables, finish };
+  const doorSwitch = def.doors.map((d) => def.switches.findIndex((sw) => sw.id === d.switchId));
+  return {
+    def,
+    solids,
+    spikes,
+    revealables,
+    finish,
+    hazards: def.movingHazards,
+    switches: def.switches,
+    doors: def.doors,
+    doorSwitch,
+    pickups: def.pickups,
+  };
 }
 
 /**

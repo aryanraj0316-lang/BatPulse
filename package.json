@@ -9,7 +9,9 @@
     "web": "expo start --web",
     "test": "jest",
     "typecheck": "tsc --noEmit",
-    "levels": "node tools/buildLevels.js"
+    "levels": "node tools/buildLevels.js",
+    "e2e:phase1": "node tools/e2e/phase1.js",
+    "e2e:phase2": "node tools/e2e/phase2.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",

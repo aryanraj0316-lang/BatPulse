@@ -4,7 +4,6 @@ import { AssetRegistry } from '../assets/AssetRegistry';
 import { VisualKey } from '../assets/keys';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { GameSim } from '../sim/game';
-import { Revealable } from '../sim/world';
 
 interface Props {
   sim: GameSim;
@@ -29,27 +28,22 @@ const WALL_KEY = { normal: 'wall_normal', crystal: 'wall_crystal', mossy: 'wall_
 const q = (v: number) => Math.round(v * 16) / 16;
 
 interface PieceProps {
-  item: Revealable;
+  visual: VisualKey;
+  x: number; // centre
+  y: number;
+  w: number;
+  h: number;
   glow: number;
+  active?: boolean;
+  progress?: number;
+  rotation?: number;
 }
 
-/** One revealable piece. Memoised: unchanged glow = no re-render. */
-const Piece = React.memo(
-  ({ item, glow }: PieceProps) => {
-    const key: VisualKey = item.kind === 'wall' ? WALL_KEY[item.variant] : item.kind === 'spike' ? 'spike' : 'finish';
-    const Visual = AssetRegistry.getVisual(key);
-    return (
-      <Visual
-        x={item.x + item.width / 2}
-        y={item.y + item.height / 2}
-        width={item.width}
-        height={item.height}
-        glow={Math.min(glow, 1)}
-      />
-    );
-  },
-  (a, b) => a.item === b.item && a.glow === b.glow,
-);
+/** One lit item. Memoised on plain values, so it only re-renders when something visible changed. */
+const Piece = React.memo(({ visual, x, y, w, h, glow, active, progress, rotation }: PieceProps) => {
+  const Visual = AssetRegistry.getVisual(visual);
+  return <Visual x={x} y={y} width={w} height={h} glow={Math.min(glow, 1)} active={active} progress={progress} rotation={rotation} />;
+});
 Piece.displayName = 'Piece';
 
 /**
@@ -66,10 +60,68 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
   const dead = sim.status === 'dying';
   const deathProgress = dead ? Math.min(1, 1 - sim.shake / ECHO_CONFIG.death.shakeSec) : 0;
   const pieces: React.ReactNode[] = [];
+  const hazards = sim.world.hazards;
   for (let i = 0; i < items.length; i++) {
-    const g = q(glow[i] * brightness);
+    const it = items[i];
+    let g = q(glow[i] * brightness);
+    const ref = it.ref ?? 0;
+    // state that must stay readable even when nothing is lit: an open door and its countdown
+    const doorOpen = it.kind === 'door' && sim.isDoorOpen(ref);
+    const switchLit = it.kind === 'switch' && sim.isSwitchLit(ref);
+    if (doorOpen) g = Math.max(g, 0.85);
+    if (switchLit) g = Math.max(g, 0.7);
     if (g <= 0.02) continue;
-    pieces.push(<Piece key={i} item={items[i]} glow={g} />);
+
+    switch (it.kind) {
+      case 'wall':
+        pieces.push(<Piece key={i} visual={WALL_KEY[it.variant]} x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
+        break;
+      case 'spike':
+        pieces.push(<Piece key={i} visual="spike" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
+        break;
+      case 'finish':
+        pieces.push(<Piece key={i} visual="finish" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
+        break;
+      case 'hazard': {
+        const h = hazards[ref];
+        const p = sim.poses[ref];
+        const deg = h.kind === 'blade' ? Math.round(((p.angle * 180) / Math.PI) * 2) / 2 : 0;
+        pieces.push(
+          <Piece
+            key={i}
+            visual={h.kind === 'blade' ? 'hazard_blade' : 'hazard_slider'}
+            x={Math.round((p.x + h.width / 2) * 2) / 2}
+            y={Math.round((p.y + h.height / 2) * 2) / 2}
+            w={h.width}
+            h={h.height}
+            glow={g}
+            rotation={deg}
+          />,
+        );
+        break;
+      }
+      case 'switch':
+        pieces.push(<Piece key={i} visual="switch" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} active={switchLit} />);
+        break;
+      case 'door':
+        pieces.push(
+          <Piece
+            key={i}
+            visual="door"
+            x={it.x + it.width / 2}
+            y={it.y + it.height / 2}
+            w={it.width}
+            h={it.height}
+            glow={g}
+            active={doorOpen}
+            progress={Math.round(sim.doorProgress(ref) * 40) / 40}
+          />,
+        );
+        break;
+      case 'pickup':
+        if (!sim.pickupTaken[ref]) pieces.push(<Piece key={i} visual="pickup_charge" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
+        break;
+    }
   }
 
   const waves: React.ReactNode[] = [];

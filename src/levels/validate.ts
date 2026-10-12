@@ -48,6 +48,8 @@ export function validateLevel(raw: unknown): string[] {
     if (!isRect(h)) bad(`movingHazards[${i}] is not a valid rect`);
     else if (h.kind !== 'slider' && h.kind !== 'blade') bad(`movingHazards[${i}].kind must be slider|blade`);
     else if (!isNum(h.loopSec) || h.loopSec <= 0) bad(`movingHazards[${i}].loopSec must be > 0`);
+    else if (h.phase !== undefined && !(isNum(h.phase) && h.phase >= 0 && h.phase <= 1)) bad(`movingHazards[${i}].phase must be 0..1`);
+    else if (h.kind === 'slider' && !isPt(h.travel)) bad(`movingHazards[${i}] slider needs a travel vector`);
   });
   const switchIds = new Set<string>();
   arr('switches').forEach((s, i) => {

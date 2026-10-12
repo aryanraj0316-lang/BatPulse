@@ -1,13 +1,25 @@
 import { ECHO_CONFIG } from '../constants/gameConfig';
-import { Body, circleOverlapsBox, resolveCircleBoxes } from './collision';
+import { Body, Box, circleOverlapsBox, resolveCircleBoxes } from './collision';
+import { circleHitsHazard, HazardPose, hazardPose, segmentHitsBox } from './hazards';
 import { HintTracker } from './hints';
 import { Momentum } from './momentum';
 import { applyWaves, RevealState, WaveField } from './reveal';
 import { SonarEnergy } from './sonarEnergy';
 import { World } from './world';
 
-export type SimEvent = 'restart' | 'pulse' | 'no_charge' | 'wall_hit' | 'death' | 'finish';
+export type SimEvent =
+  | 'restart'
+  | 'pulse'
+  | 'no_charge'
+  | 'wall_hit'
+  | 'death'
+  | 'finish'
+  | 'switch'
+  | 'door_open'
+  | 'door_close'
+  | 'pickup';
 export type SimStatus = 'playing' | 'dying' | 'won';
+export type FailCause = 'spike' | 'hazard';
 
 export interface SimParams {
   /** Pulse radius in world units. */
@@ -38,7 +50,7 @@ export class GameSim {
   shake = 0;
   /** Increments on every restart so the UI can reset per-attempt visuals. */
   attempt = 0;
-  failCause: 'spike' | null = null;
+  failCause: FailCause | null = null;
   /** Receives gameplay events for audio/haptics/analytics. Must not retain anything. */
   onEvent: ((e: SimEvent) => void) | null = null;
 
@@ -48,11 +60,23 @@ export class GameSim {
   readonly reveal: RevealState;
   readonly hints: HintTracker;
 
+  /** Current pose of every moving hazard (parallel to world.hazards). */
+  readonly poses: HazardPose[];
+  /** Seconds each door stays open (0 = closed), parallel to world.doors. */
+  readonly doorTimer: Float32Array;
+  /** 1 once a pickup has been collected this attempt. */
+  readonly pickupTaken: Uint8Array;
+
   private inX = 0;
   private inY = 0;
   private deathTimer = 0;
   private sincePulse = Infinity;
   private sinceHit = Infinity;
+  /** Doors that are currently closed (solid). Rebuilt only when a door opens or closes. */
+  private closedDoors: Box[] = [];
+  private readonly doorBoxes: Box[];
+  private readonly hazardReveal: number[];
+  private readonly switchDoors: number[][];
 
   constructor(
     readonly world: World,
@@ -68,6 +92,15 @@ export class GameSim {
     });
     this.reveal = new RevealState(world.revealables.length);
     this.hints = new HintTracker(def.hints ?? []);
+
+    this.poses = world.hazards.map(() => ({ x: 0, y: 0, angle: 0 }));
+    this.doorTimer = new Float32Array(world.doors.length);
+    this.pickupTaken = new Uint8Array(world.pickups.length);
+    this.doorBoxes = world.doors.map((d) => ({ x: d.x, y: d.y, width: d.width, height: d.height }));
+    this.hazardReveal = world.hazards.map((_, i) => world.revealables.findIndex((r) => r.kind === 'hazard' && r.ref === i));
+    this.switchDoors = world.switches.map((_, si) => world.doorSwitch.map((s, di) => (s === si ? di : -1)).filter((d) => d >= 0));
+    this.rebuildClosedDoors();
+    this.syncHazards();
   }
 
   /** Joystick output, already dead-zoned, magnitude 0..1. */
@@ -78,6 +111,20 @@ export class GameSim {
 
   setPulseRadius(r: number): void {
     this.params.pulseRadius = r;
+  }
+
+  /** 0..1 of the door's open time that is left (1 right after the switch was hit). 0 when closed. */
+  doorProgress(i: number): number {
+    return Math.min(1, this.doorTimer[i] / ECHO_CONFIG.door.openSec);
+  }
+
+  isDoorOpen(i: number): boolean {
+    return this.doorTimer[i] > 0;
+  }
+
+  /** A switch counts as lit while any of the doors it controls is open. */
+  isSwitchLit(si: number): boolean {
+    return this.switchDoors[si].some((d) => this.doorTimer[d] > 0);
   }
 
   /** Fresh attempt. Allowed in every state (during a pulse, during death, ...). */
@@ -101,6 +148,10 @@ export class GameSim {
     this.waves.clear();
     this.reveal.clear();
     this.hints.reset();
+    this.doorTimer.fill(0);
+    this.pickupTaken.fill(0);
+    this.rebuildClosedDoors();
+    this.syncHazards();
     this.attempt++;
     this.onEvent?.('restart');
   }
@@ -127,7 +178,9 @@ export class GameSim {
 
     // waves and glow keep animating in every state so a death or win does not freeze the picture
     this.waves.update(dt);
+    this.syncHazards();
     applyWaves(this.waves, this.world.revealables, this.reveal, this.params.glowBonusSec ?? 0);
+    this.hitSwitches();
     this.reveal.update(dt);
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
 
@@ -143,6 +196,7 @@ export class GameSim {
     this.sinceHit += dt;
     this.energy.update(dt);
     this.hints.update(dt);
+    this.updateDoors(dt);
 
     this.move(dt);
 
@@ -152,11 +206,21 @@ export class GameSim {
     this.momentum.update(dt, speed > cfg.momentum.movingSpeed);
     if (speed > cfg.momentum.movingSpeed) this.hints.onMoved();
 
+    this.collectPickups();
+
     // spikes kill (hitbox slightly smaller than drawn, see config)
     const spikes = this.world.spikes;
     for (let i = 0; i < spikes.length; i++) {
       if (circleOverlapsBox(b.x, b.y, b.r, spikes[i], cfg.hazards.spikeForgiveness)) {
         this.die('spike');
+        return;
+      }
+    }
+    // moving hazards kill
+    const hz = this.world.hazards;
+    for (let i = 0; i < hz.length; i++) {
+      if (circleHitsHazard(hz[i], this.poses[i], b.x, b.y, b.r)) {
+        this.die('hazard');
         return;
       }
     }
@@ -168,6 +232,104 @@ export class GameSim {
       b.vx = 0;
       b.vy = 0;
       this.onEvent?.('finish');
+    }
+  }
+
+  /** Puts every moving hazard where it is at the current attempt time and moves its reveal box with it. */
+  private syncHazards() {
+    const hz = this.world.hazards;
+    for (let i = 0; i < hz.length; i++) {
+      const p = hazardPose(hz[i], this.elapsed, this.poses[i]);
+      const r = this.world.revealables[this.hazardReveal[i]];
+      if (r) {
+        r.x = p.x;
+        r.y = p.y;
+      }
+    }
+  }
+
+  private rebuildClosedDoors() {
+    this.closedDoors = this.doorBoxes.filter((_, i) => this.doorTimer[i] <= 0);
+  }
+
+  /**
+   * A pulse that reaches a switch with a clear line of sight lights it and opens its doors for `door.openSec`.
+   * Hitting it again while open restarts the countdown.
+   */
+  private hitSwitches() {
+    const sw = this.world.switches;
+    if (sw.length === 0) return;
+    const waves = this.waves;
+    for (let w = 0; w < waves.size; w++) {
+      if (!waves.active[w]) continue;
+      const prev = waves.prevRadius[w];
+      const cur = waves.radius[w];
+      if (cur <= prev) continue;
+      const ox = waves.ox[w];
+      const oy = waves.oy[w];
+      for (let s = 0; s < sw.length; s++) {
+        const d = Math.hypot(sw[s].x - ox, sw[s].y - oy);
+        if (d <= prev || d > cur || d > waves.maxRadius[w]) continue;
+        if (ECHO_CONFIG.door.switchLosEnabled && this.lineBlocked(ox, oy, sw[s].x, sw[s].y)) continue;
+        this.activateSwitch(s);
+      }
+    }
+  }
+
+  private lineBlocked(ax: number, ay: number, bx: number, by: number): boolean {
+    const solids = this.world.solids;
+    for (let i = 0; i < solids.length; i++) if (segmentHitsBox(ax, ay, bx, by, solids[i])) return true;
+    for (let i = 0; i < this.closedDoors.length; i++) if (segmentHitsBox(ax, ay, bx, by, this.closedDoors[i])) return true;
+    return false;
+  }
+
+  private activateSwitch(s: number) {
+    const doors = this.switchDoors[s];
+    let opened = false;
+    for (let k = 0; k < doors.length; k++) {
+      if (this.doorTimer[doors[k]] <= 0) opened = true;
+      this.doorTimer[doors[k]] = ECHO_CONFIG.door.openSec;
+    }
+    if (opened) this.rebuildClosedDoors();
+    this.onEvent?.('switch');
+    if (opened) this.onEvent?.('door_open');
+  }
+
+  /**
+   * Counts the open timers down. A door never closes on top of the bat: it stays open until the bat has
+   * left it, so a closing door can never crush or trap the player.
+   */
+  private updateDoors(dt: number) {
+    let closed = false;
+    for (let i = 0; i < this.doorTimer.length; i++) {
+      if (this.doorTimer[i] <= 0) continue;
+      this.doorTimer[i] -= dt;
+      if (this.doorTimer[i] <= 0) {
+        if (circleOverlapsBox(this.body.x, this.body.y, this.body.r + 2, this.doorBoxes[i])) {
+          this.doorTimer[i] = 1e-4; // hold open until the bat is clear
+        } else {
+          this.doorTimer[i] = 0;
+          closed = true;
+        }
+      }
+    }
+    if (closed) {
+      this.rebuildClosedDoors();
+      this.onEvent?.('door_close');
+    }
+  }
+
+  private collectPickups() {
+    const pk = this.world.pickups;
+    const reach = this.body.r + ECHO_CONFIG.pickup.radius;
+    for (let i = 0; i < pk.length; i++) {
+      if (this.pickupTaken[i]) continue;
+      if (Math.hypot(pk[i].x - this.body.x, pk[i].y - this.body.y) > reach) continue;
+      // a pickup is only used up when it actually refills something
+      if (this.energy.add(1) > 0) {
+        this.pickupTaken[i] = 1;
+        this.onEvent?.('pickup');
+      }
     }
   }
 
@@ -201,6 +363,10 @@ export class GameSim {
       b.y += b.vy * sdt;
       const hit = resolveCircleBoxes(b, this.world.solids);
       if (hit > impact) impact = hit;
+      if (this.closedDoors.length > 0) {
+        const dhit = resolveCircleBoxes(b, this.closedDoors);
+        if (dhit > impact) impact = dhit;
+      }
     }
 
     // never leave the level, even if a level file forgot its outer walls
@@ -230,7 +396,7 @@ export class GameSim {
     }
   }
 
-  private die(cause: 'spike') {
+  private die(cause: FailCause) {
     this.status = 'dying';
     this.failCause = cause;
     this.shake = ECHO_CONFIG.death.shakeSec;

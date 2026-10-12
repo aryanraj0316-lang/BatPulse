@@ -1,0 +1,117 @@
+{
+  "id": 11,
+  "name": "Mossy Depths",
+  "chapter": 1,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 70,
+    "y": 590
+  },
+  "finish": {
+    "x": 70,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 140,
+      "width": 240,
+      "height": 40,
+      "type": "mossy"
+    },
+    {
+      "x": 120,
+      "y": 300,
+      "width": 240,
+      "height": 40,
+      "type": "mossy"
+    },
+    {
+      "x": 20,
+      "y": 460,
+      "width": 240,
+      "height": 40,
+      "type": "mossy"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 340,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [
+    {
+      "x": 160,
+      "y": 560,
+      "width": 60,
+      "height": 20
+    }
+  ],
+  "movingHazards": [
+    {
+      "kind": "slider",
+      "x": 100,
+      "y": 380,
+      "width": 60,
+      "height": 24,
+      "travel": {
+        "x": 100,
+        "y": 0
+      },
+      "loopSec": 4,
+      "phase": 0
+    }
+  ],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 4
+  },
+  "ghostPulseLimit": 4,
+  "parTime": 32,
+  "starThresholds": {
+    "two": 64,
+    "three": 32
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  },
+  "hints": [
+    {
+      "text": "Mossy walls barely echo. Trust your last pulse.",
+      "until": "seconds",
+      "seconds": 7
+    }
+  ]
+}

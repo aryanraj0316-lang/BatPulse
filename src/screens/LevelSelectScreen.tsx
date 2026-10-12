@@ -2,117 +2,78 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { PALETTE } from '../constants/palette';
 import { useProgressStore } from '../state/progressStore';
-import { authoredLevelIds, loadAuthoredLevel } from '../levels/loader';
-import { emptyRecord } from '../state/progress';
+import { CHAPTERS, chapterLevelIds, chapterProgress, isLevelUnlocked } from '../levels/chapters';
+import { hasAuthoredLevel } from '../levels/loader';
 
-interface LevelSelectScreenProps {
+interface Props {
   onSelectLevel: (levelId: number) => void;
   onBack: () => void;
 }
 
-export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLevel, onBack }) => {
+export const LevelSelectScreen: React.FC<Props> = ({ onSelectLevel, onBack }) => {
   const { records, shards } = useProgressStore();
-  const levels = authoredLevelIds()
-    .filter((id) => id > 0)
-    .sort((a, b) => a - b)
-    .map((id) => loadAuthoredLevel(id))
-    .filter((l): l is NonNullable<typeof l> => l !== null);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7} testID="btn-select-back">
           <Text style={styles.backBtnText}>← BACK</Text>
         </TouchableOpacity>
-
         <View style={styles.headerCenter}>
-          <Text style={styles.title}>ECHO CHAMBERS</Text>
-          <Text style={styles.subtitle}>ACOUSTIC ARCHIVES</Text>
+          <Text style={styles.title}>LEVEL SELECT</Text>
         </View>
-
         <Text style={styles.shardCount}>✦ {shards}</Text>
       </View>
 
-      {/* Levels Scroll List */}
-      <ScrollView contentContainerStyle={styles.scrollList} showsVerticalScrollIndicator={false}>
-        {levels.map((preset) => {
-          const record = records[preset.id] || emptyRecord(preset.id, preset.id === 1);
-
-          const isUnlocked = record.unlocked;
-
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {CHAPTERS.map((chapter) => {
+          const prog = chapterProgress(chapter, records);
           return (
-            <TouchableOpacity
-              key={preset.id}
-              style={[
-                styles.card,
-                {
-                  borderColor: isUnlocked
-                    ? record.completed
-                      ? PALETTE.sonarCyan
-                      : 'rgba(255, 255, 255, 0.2)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  backgroundColor: isUnlocked ? 'rgba(8, 13, 22, 0.7)' : 'rgba(5, 7, 12, 0.4)',
-                  opacity: isUnlocked ? 1.0 : 0.45,
-                },
-              ]}
-              disabled={!isUnlocked}
-              onPress={() => onSelectLevel(preset.id)}
-              activeOpacity={0.75}
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.numberRow}>
-                  <Text
-                    style={[
-                      styles.levelNum,
-                      { color: isUnlocked ? PALETTE.sonarCyan : '#64748B' },
-                    ]}
-                  >
-                    ECHO {preset.id.toString().padStart(2, '0')}
-                  </Text>
-                  {record.ghostRun && (
-                    <Text style={styles.ghostTag}>🦇 GHOST</Text>
-                  )}
-                </View>
-
-                {/* Stars Display */}
-                {isUnlocked ? (
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3].map((starIdx) => (
-                      <Text
-                        key={starIdx}
-                        style={[
-                          styles.star,
-                          {
-                            color:
-                              starIdx <= record.stars
-                                ? PALETTE.shardGold
-                                : 'rgba(255,255,255,0.15)',
-                          },
-                        ]}
-                      >
-                        ★
-                      </Text>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.lockTag}>🔒 LOCKED</Text>
-                )}
+            <View key={chapter.id} style={styles.chapter}>
+              <Text style={styles.chapterTag}>CHAPTER {chapter.id}</Text>
+              <Text style={styles.chapterName} testID={`chapter-${chapter.id}`}>
+                {chapter.name.toUpperCase()}
+              </Text>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${(prog.stars / prog.maxStars) * 100}%` }]} />
               </View>
+              <Text style={styles.progressText}>
+                ★ {prog.stars} / {prog.maxStars} · {prog.completed} / {prog.total} cleared
+              </Text>
 
-              <Text style={styles.cardTitle}>{preset.name.toUpperCase()}</Text>
-              <Text style={styles.cardSubtitle}>CHAPTER {preset.chapter}</Text>
-
-              {/* Best Record Footer */}
-              {isUnlocked && record.completed && (
-                <View style={styles.cardFooter}>
-                  <Text style={styles.recordStat}>
-                    ⚡ Best: {(record.bestTime ?? 0).toFixed(1)}s (Par {preset.parTime}s)
-                  </Text>
-                  <Text style={styles.recordStat}>🔥 Momentum ×{(record.bestMomentum ?? 1).toFixed(1)}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <View style={styles.grid}>
+                {chapterLevelIds(chapter)
+                  .filter((id) => hasAuthoredLevel(id))
+                  .map((id) => {
+                    const rec = records[id];
+                    const open = isLevelUnlocked(id, records);
+                    return (
+                      <TouchableOpacity
+                        key={id}
+                        style={[styles.tile, open ? (rec?.completed ? styles.tileDone : styles.tileOpen) : styles.tileLocked]}
+                        disabled={!open}
+                        onPress={() => onSelectLevel(id)}
+                        activeOpacity={0.75}
+                        testID={`level-${id}`}
+                      >
+                        <Text style={[styles.tileNum, { color: open ? PALETTE.sonarCyan : '#475569' }]}>{id.toString().padStart(2, '0')}</Text>
+                        {open ? (
+                          <Text style={styles.tileStars}>
+                            {[1, 2, 3].map((i) => (
+                              <Text key={i} style={{ color: i <= (rec?.stars ?? 0) ? PALETTE.shardGold : 'rgba(255,255,255,0.15)' }}>
+                                ★
+                              </Text>
+                            ))}
+                          </Text>
+                        ) : (
+                          <Text style={styles.lock}>🔒</Text>
+                        )}
+                        {rec?.ghostRun && <Text style={styles.ghost}>🦇</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            </View>
           );
         })}
       </ScrollView>
@@ -121,127 +82,49 @@ export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLe
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: PALETTE.voidBlack,
-    paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
+  container: { flex: 1, backgroundColor: PALETTE.voidBlack, paddingTop: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 14 },
   backBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 4,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
-  backBtnText: {
-    color: '#CBD5E1',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: PALETTE.sonarCyan,
-    letterSpacing: 1.5,
-  },
-  shardCount: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: PALETTE.shardGold,
-    letterSpacing: 1,
-  },
-  scrollList: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    gap: 12,
-  },
-  card: {
+  backBtnText: { color: '#CBD5E1', fontWeight: '700', fontSize: 11, letterSpacing: 1 },
+  headerCenter: { alignItems: 'center' },
+  title: { fontSize: 15, fontWeight: '900', color: '#FFFFFF', letterSpacing: 2 },
+  shardCount: { color: PALETTE.shardGold, fontWeight: '800', fontSize: 12, minWidth: 50, textAlign: 'right' },
+  scroll: { paddingHorizontal: 20, paddingBottom: 40 },
+  chapter: {
+    backgroundColor: 'rgba(8, 13, 22, 0.7)',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(77, 240, 255, 0.15)',
     padding: 16,
-    borderWidth: 1.5,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  chapterTag: { fontSize: 9, fontWeight: '800', color: PALETTE.sonarCyan, letterSpacing: 2 },
+  chapterName: { fontSize: 18, fontWeight: '900', color: '#F8FAFC', letterSpacing: 2, marginTop: 2 },
+  progressTrack: { height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', marginTop: 10, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: PALETTE.shardGold },
+  progressText: { fontSize: 10, color: '#94A3B8', marginTop: 6, letterSpacing: 1 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  tile: {
+    width: '22%',
+    aspectRatio: 1,
+    minWidth: 64,
+    borderRadius: 8,
+    borderWidth: 1,
     alignItems: 'center',
-    marginBottom: 6,
-  },
-  numberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  levelNum: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  ghostTag: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: PALETTE.sonarCyan,
-    backgroundColor: 'rgba(77, 240, 255, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 3,
-    letterSpacing: 0.8,
-  },
-  starsRow: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 2,
   },
-  star: {
-    fontSize: 16,
-  },
-  lockTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#64748B',
-    letterSpacing: 1,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 1.2,
-    marginTop: 2,
-  },
-  cardSubtitle: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 2,
-    letterSpacing: 0.5,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 10,
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  recordStat: {
-    fontSize: 10,
-    color: '#CBD5E1',
-    fontWeight: '600',
-    letterSpacing: 0.8,
-  },
+  tileOpen: { borderColor: 'rgba(255,255,255,0.25)', backgroundColor: 'rgba(8,13,22,0.8)' },
+  tileDone: { borderColor: PALETTE.sonarCyan, backgroundColor: 'rgba(77,240,255,0.06)' },
+  tileLocked: { borderColor: 'rgba(255,255,255,0.06)', backgroundColor: 'rgba(5,7,12,0.5)', opacity: 0.55 },
+  tileNum: { fontSize: 18, fontWeight: '900', letterSpacing: 1 },
+  tileStars: { fontSize: 11 },
+  lock: { fontSize: 12 },
+  ghost: { position: 'absolute', top: 3, right: 4, fontSize: 10 },
 });

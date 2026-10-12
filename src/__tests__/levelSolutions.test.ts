@@ -3,7 +3,7 @@ import { flyLevel, findRoute } from './helpers/levelBot';
 import { buildWorld } from '../sim/world';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 
-const ids = authoredLevelIds().sort((a, b) => a - b);
+const ids = authoredLevelIds().filter((i) => i <= 5).sort((a, b) => a - b); // static levels; Chapter 1 dynamic levels are in chapter1.test.ts
 
 describe('every authored level is completable (real simulation, automated flight)', () => {
   it.each(ids.map((id) => [id]))('level %i: a safe route exists and the bat finishes without dying', (id) => {

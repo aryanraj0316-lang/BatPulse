@@ -16,6 +16,7 @@
  *   ^  spike              .  empty
  *   S  start              F  finish ring
  *   k  checkpoint         p  charge pickup
+ *   1-9  switch (id s1..s9)   a-i  door controlled by switch 1..9 (a = s1, b = s2, ...)
  */
 const fs = require('fs');
 const path = require('path');
@@ -68,6 +69,7 @@ function build(file) {
   let finish = null;
   const checkpoints = [];
   const pickups = [];
+  const switches = [];
   grid.forEach((line, r) => {
     for (let c = 0; c < cols; c++) {
       const p = { x: c * CELL + CELL / 2, y: r * CELL + CELL / 2 };
@@ -80,7 +82,8 @@ function build(file) {
         finish = { ...p, radius: 18 };
       } else if (ch === 'k') checkpoints.push(p);
       else if (ch === 'p') pickups.push({ type: 'charge', ...p });
-      else if (!'#CM^.'.includes(ch)) throw new Error(`${file}: unknown cell "${ch}" at row ${r}, col ${c}`);
+      else if (ch >= '1' && ch <= '9') switches.push({ id: `s${ch}`, x: p.x, y: p.y, radius: 14 });
+      else if (!'#CM^.abcdefghi'.includes(ch)) throw new Error(`${file}: unknown cell "${ch}" at row ${r}, col ${c}`);
     }
   });
   if (!start) throw new Error(`${file}: no S (start)`);
@@ -92,6 +95,14 @@ function build(file) {
     width: r.width,
     height: r.height,
     type: WALL_CHARS[r.ch],
+  }));
+  const doors = mergeRects(grid, (ch) => ch >= 'a' && ch <= 'i').map((r) => ({
+    id: `d_${r.ch}_${r.x}_${r.y}`,
+    x: r.x,
+    y: r.y,
+    width: r.width,
+    height: r.height,
+    switchId: `s${r.ch.charCodeAt(0) - 96}`,
   }));
   const spikes = mergeRects(grid, (ch) => ch === '^').map(({ x, y, width, height }) => ({ x, y, width, height }));
 
@@ -106,8 +117,8 @@ function build(file) {
     walls,
     spikes,
     movingHazards: meta.movingHazards || [],
-    switches: meta.switches || [],
-    doors: meta.doors || [],
+    switches,
+    doors,
     pickups,
     enemies: meta.enemies || [],
     checkpoints,

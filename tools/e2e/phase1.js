@@ -184,7 +184,7 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
       if (n === 3) await h.shot('07_level3_won');
       if (n === 5) await h.shot('08_level5_won');
     }
-    check('Next is hidden after the last authored level', !(await h.exists('btn-next')));
+    check('after Echo 05 the chapter continues (Next goes to Echo 06)', await h.exists('btn-next'));
 
     // ---- 50 consecutive restarts
     await h.tapTestId('btn-retry');
@@ -219,8 +219,8 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     await h.clickText('SELECT ECHO CHAMBER');
     await sleep(500);
     await h.shot('09_level_select');
-    check('level select lists the five levels with stars', (await h.eval('document.body.innerText')).includes('ECHO 05'));
-    await h.clickText('ECHO 03');
+    check('level select lists the cleared levels as open', (await h.eval(`document.querySelector('[data-testid="level-5"]').getAttribute('aria-disabled')`)) !== 'true');
+    await h.tapTestId('level-3');
     await sleep(1200);
     s = await state(h);
     check('level select opens Echo 03', s && s.id === 3);
@@ -259,7 +259,7 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     check('relaunch does not show the first-launch prompt again', !(await h.clickText('INITIALIZE ACOUSTIC')));
     await sleep(2500);
     s = await state(h);
-    check('returning player resumes at the furthest unlocked level (Echo 05)', s && s.id === 5, JSON.stringify(s && s.id));
+    check('returning player resumes at the furthest unlocked level (Echo 06, unlocked by clearing Echo 05)', s && s.id === 6, JSON.stringify(s && s.id));
 
     // ---- corrupt the save on purpose and relaunch: recovery from the backup
     await h.eval(`localStorage.setItem('echo.save.primary','{{corrupt')`);

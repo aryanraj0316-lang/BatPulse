@@ -18,9 +18,12 @@ export interface WallDef extends LevelRect {
 export type SpikeDef = LevelRect;
 export interface MovingHazardDef extends LevelRect {
   kind: 'slider' | 'blade';
-  /** slider: travel vector over one loop; blade: ignored */
+  /** slider: how far it travels (out and back over one loop); blade: ignored */
   travel?: LevelPoint;
+  /** Seconds for one full cycle (slider: out and back, blade: one rotation). */
   loopSec: number;
+  /** Where in the cycle it starts, 0..1. Lets several hazards be out of step. */
+  phase?: number;
 }
 export interface SwitchDef {
   id: string;
