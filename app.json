@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Bats View",
-    "slug": "bats-view",
+    "name": "Echolocation Game",
+    "slug": "echolocation-game",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -9,12 +9,14 @@
       "backgroundColor": "#040711"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.echolocation.game"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#040711"
-      }
+      },
+      "package": "com.echolocation.game"
     },
     "web": {
       "bundler": "metro"
