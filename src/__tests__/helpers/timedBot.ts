@@ -1,6 +1,7 @@
 import { ECHO_CONFIG } from '../../constants/gameConfig';
 import { LevelDef } from '../../levels/schema';
 import { distanceToBox } from '../../sim/collision';
+import { enemyChaseSpeed, patrolInfo, PatrolInfo } from '../../sim/enemy';
 import { GameSim, SimParams } from '../../sim/game';
 import { circleHitsHazard, hazardPose, HazardPose, segmentHitsBox } from '../../sim/hazards';
 import { buildWorld, World } from '../../sim/world';
@@ -20,6 +21,13 @@ const WALL_R = PLAYER_R + 6;
 const HAZ_R = PLAYER_R + 8;
 const PULSE_REACH = 110; // plan to pulse from this close to a switch
 
+/**
+ * stealth: stay out of every hunter's reach and never be heard (no pulses near them).
+ * loud: fly the same safe route but pulse freely every second, so the hunters hear it, leave their patrol and
+ * chase; the bot must still reach the finish (the hunters are slower and the route is open).
+ */
+export type EnemyMode = 'stealth' | 'loud';
+
 interface Segment {
   goal: (c: number, r: number, k: number) => boolean;
   /** Longest plan, in steps. */
@@ -35,6 +43,8 @@ export interface TimedRun {
   /** Where the bat was about every 1.5 s, and when it pulsed (the documented solution). */
   trace: { t: number; x: number; y: number }[];
   pulseTimes: number[];
+  alerts: number;
+  ghost: boolean;
 }
 
 function doorBlocksAt(world: World, doorTimer: Float32Array, di: number, tPlan: number): boolean {
@@ -42,11 +52,14 @@ function doorBlocksAt(world: World, doorTimer: Float32Array, di: number, tPlan: 
 }
 
 /** Plans one segment starting from the sim's current position, time and door state. Returns positions per step. */
-function plan(world: World, sim: GameSim, seg: Segment): Pt[] | null {
+function plan(world: World, sim: GameSim, seg: Segment, mode: EnemyMode = 'stealth'): Pt[] | null {
   const def = world.def;
   const cols = Math.ceil(def.width / CELL);
   const rows = Math.ceil(def.height / CELL);
   const poses: HazardPose[] = world.hazards.map(() => ({ x: 0, y: 0, angle: 0 }));
+  const info: PatrolInfo = { x: 0, y: 0, wp: 0, dwell: 0 };
+  const patrolSpeeds = world.enemies.map((e) => enemyChaseSpeed(e) * ECHO_CONFIG.enemy.patrolSpeedFactor);
+  const avoid = ECHO_CONFIG.enemy.senseRadius + 45; // keep well outside the hunters' sensing zones
   const t0 = sim.elapsed;
   const doorTimer = sim.doorTimer;
 
@@ -69,6 +82,14 @@ function plan(world: World, sim: GameSim, seg: Segment): Pt[] | null {
     const tp = k * DT;
     for (let di = 0; di < world.doors.length; di++) {
       if (doorBlocksAt(world, doorTimer, di, tp) && distanceToBox(x, y, world.doors[di]) < WALL_R) return false;
+    }
+    {
+      for (let ei = 0; ei < world.enemies.length; ei++) {
+        for (const dt of [0, -DT / 2, DT / 2]) {
+          patrolInfo(world.enemies[ei], t0 + tp + dt, patrolSpeeds[ei], info);
+          if (Math.hypot(info.x - x, info.y - y) < avoid) return false;
+        }
+      }
     }
     // moving hazards: check this step and the half step before, so nothing is swept through
     for (let h = 0; h < world.hazards.length; h++) {
@@ -123,8 +144,9 @@ function plan(world: World, sim: GameSim, seg: Segment): Pt[] | null {
 }
 
 /** Flies a planned segment in real time, steering to where the plan says the bat should be. */
-function follow(sim: GameSim, path: Pt[], limitSteps: number): void {
+function follow(sim: GameSim, path: Pt[], limitSteps: number, noisyEverySec = 0, noiseFrom = 0): void {
   const t0 = sim.elapsed;
+  let nextNoise = 0;
   for (let i = 0; i < limitSteps; i++) {
     if (sim.status !== 'playing') return;
     const k = (sim.elapsed - t0) / DT;
@@ -134,6 +156,11 @@ function follow(sim: GameSim, path: Pt[], limitSteps: number): void {
     const d = Math.hypot(dx, dy);
     const gain = Math.min(1, d / 18);
     sim.setInput(d > 0.5 ? (dx / d) * gain : 0, d > 0.5 ? (dy / d) * gain : 0);
+    // loud mode: keep pulsing once the spawn safe window is over, so every hunter in range hears it
+    if (noisyEverySec > 0 && sim.elapsed >= Math.max(noiseFrom, ECHO_CONFIG.enemy.spawnSafeSec + 0.1) && sim.elapsed >= nextNoise) {
+      sim.firePulse();
+      nextNoise = sim.elapsed + noisyEverySec;
+    }
     sim.step(1 / 60);
     if (k >= path.length + 1) break;
   }
@@ -142,7 +169,16 @@ function follow(sim: GameSim, path: Pt[], limitSteps: number): void {
 const losClear = (world: World, ax: number, ay: number, bx: number, by: number) =>
   !world.solids.some((s) => segmentHitsBox(ax, ay, bx, by, s));
 
-export function flyTimed(def: LevelDef, params: Partial<SimParams> = {}): TimedRun {
+export interface LoudVariant {
+  /** Seconds to wait at the start before moving. */
+  startDelay: number;
+  /** Seconds between pulses once the noise begins. */
+  noiseEvery: number;
+  /** Attempt time at which the noise begins. */
+  noiseFrom: number;
+}
+
+export function flyTimed(def: LevelDef, params: Partial<SimParams> = {}, mode: EnemyMode = 'stealth', variant: LoudVariant = { startDelay: 0, noiseEvery: 1, noiseFrom: 0 }): TimedRun {
   const world = buildWorld(def, ECHO_CONFIG.world.wallSegmentLen);
   const sim = new GameSim(world, { pulseRadius: 150, ...params });
   let deaths = 0;
@@ -163,21 +199,46 @@ export function flyTimed(def: LevelDef, params: Partial<SimParams> = {}): TimedR
     }
   };
   const cols = Math.ceil(def.width / CELL);
-  const result = (finished: boolean, failedAt?: string): TimedRun => ({ finished, timeSec: sim.elapsed, deaths, pulses: sim.pulsesUsed, failedAt, trace, pulseTimes });
+  const infoScratch: PatrolInfo = { x: 0, y: 0, wp: 0, dwell: 0 };
+  const patrolSpeeds = world.enemies.map((e) => enemyChaseSpeed(e) * ECHO_CONFIG.enemy.patrolSpeedFactor);
+  const noisy = mode === 'loud' ? variant.noiseEvery : 0;
+  const noiseFrom = variant.noiseFrom;
+  // optional wait before leaving (hunters keep patrolling meanwhile)
+  for (let i = 0; i < Math.round(variant.startDelay * 60); i++) sim.step(1 / 60);
+  const result = (finished: boolean, failedAt?: string): TimedRun => ({
+    finished,
+    timeSec: sim.elapsed,
+    deaths,
+    pulses: sim.pulsesUsed,
+    failedAt,
+    trace,
+    pulseTimes,
+    alerts: sim.alertCount,
+    ghost: finished && sim.isGhostRun,
+  });
 
   // 1. every switch in turn: go to a spot with a clear view of it, pulse
   const order = [...world.switches].sort((a, b) => a.id.localeCompare(b.id));
   for (const sw of order) {
     const alreadyOpen = world.doorSwitch.some((s, di) => world.switches[s] === sw && sim.doorTimer[di] > 0.5);
     if (alreadyOpen) continue;
-    const goal = (c: number, r: number) => {
+    const quietRange = Math.max(sim.hearingRadius, ECHO_CONFIG.enemy.switchNoiseRadius) + 25;
+    const goal = (c: number, r: number, k: number) => {
       const x = c * CELL + CELL / 2;
       const y = r * CELL + CELL / 2;
-      return Math.hypot(x - sw.x, y - sw.y) <= PULSE_REACH && losClear(world, x, y, sw.x, sw.y);
+      if (Math.hypot(x - sw.x, y - sw.y) > PULSE_REACH || !losClear(world, x, y, sw.x, sw.y)) return false;
+      if (mode === 'stealth') {
+        // the pulse and the switch click must not be heard by any hunter at that moment
+        for (let ei = 0; ei < world.enemies.length; ei++) {
+          patrolInfo(world.enemies[ei], sim.elapsed + k * DT, patrolSpeeds[ei], infoScratch);
+          if (Math.hypot(infoScratch.x - x, infoScratch.y - y) < quietRange) return false;
+        }
+      }
+      return true;
     };
-    const path = plan(world, sim, { goal, maxSteps: 240 });
+    const path = plan(world, sim, { goal, maxSteps: 240 }, mode);
     if (!path) return result(false, `no safe route to switch ${sw.id}`);
-    follow(sim, path, (path.length + 4) * 6);
+    follow(sim, path, (path.length + 4) * 6, noisy, noiseFrom);
     if (sim.status !== 'playing') return result(false, `died on the way to switch ${sw.id}`);
     sim.setInput(0, 0);
     // let the bat settle, then pulse
@@ -191,12 +252,36 @@ export function flyTimed(def: LevelDef, params: Partial<SimParams> = {}): TimedR
   // 2. the finish
   const fc = Math.min(cols - 1, Math.floor(world.finish.x / CELL));
   const fr = Math.floor(world.finish.y / CELL);
-  const path = plan(world, sim, { goal: (c, r) => c === fc && r === fr, maxSteps: 300 });
+  const path = plan(world, sim, { goal: (c, r) => c === fc && r === fr, maxSteps: 300 }, mode);
   if (!path) return result(false, 'no safe route to the finish (door timers or hazards block every way)');
-  follow(sim, path, (path.length + 8) * 6);
+  follow(sim, path, (path.length + 8) * 6, noisy, noiseFrom);
   for (let i = 0; i < 120 && sim.status === 'playing'; i++) {
     sim.setInput((world.finish.x - sim.body.x) / 40, (world.finish.y - sim.body.y) / 40);
     sim.step(1 / 60);
   }
   return result(sim.status === 'won', sim.status === 'won' ? undefined : 'did not reach the finish');
+}
+
+export interface LoudSolution extends TimedRun {
+  variant: LoudVariant;
+  tried: number;
+}
+
+/**
+ * Searches for a LOUD solution: a way to reach the finish after the hunters were alerted (at least one alert).
+ * The simulation is deterministic, so trying departure delays and noise patterns is a valid existence proof.
+ */
+export function findLoudSolution(def: LevelDef, params: Partial<SimParams> = {}): LoudSolution | null {
+  let tried = 0;
+  for (const noiseEvery of [1, 2]) {
+    for (const noiseFrom of [3.2, 5, 7, 9]) {
+      for (const startDelay of [0, 1, 2, 3, 4, 5, 6, 8, 10]) {
+        tried++;
+        const variant = { startDelay, noiseEvery, noiseFrom };
+        const r = flyTimed(def, params, 'loud', variant);
+        if (r.finished && r.deaths === 0 && r.alerts > 0) return { ...r, variant, tried };
+      }
+    }
+  }
+  return null;
 }

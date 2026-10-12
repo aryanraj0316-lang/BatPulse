@@ -1,0 +1,143 @@
+{
+  "id": 32,
+  "name": "Spin Cycle",
+  "chapter": 2,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 50,
+    "y": 590
+  },
+  "finish": {
+    "x": 270,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 100,
+      "y": 20,
+      "width": 40,
+      "height": 460,
+      "type": "normal"
+    },
+    {
+      "x": 200,
+      "y": 20,
+      "width": 40,
+      "height": 460,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 300,
+      "y": 280,
+      "width": 60,
+      "height": 40,
+      "type": "normal"
+    },
+    {
+      "x": 100,
+      "y": 560,
+      "width": 40,
+      "height": 100,
+      "type": "normal"
+    },
+    {
+      "x": 200,
+      "y": 560,
+      "width": 40,
+      "height": 100,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 80,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 140,
+      "y": 640,
+      "width": 60,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 240,
+      "y": 640,
+      "width": 120,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [
+    {
+      "kind": "blade",
+      "x": 285,
+      "y": 425,
+      "width": 50,
+      "height": 50,
+      "loopSec": 6,
+      "phase": 0.1
+    }
+  ],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 170,
+          "y": 80
+        },
+        {
+          "x": 170,
+          "y": 580
+        }
+      ],
+      "speed": "fast",
+      "phaseSec": 2
+    }
+  ],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 4
+  },
+  "ghostPulseLimit": 4,
+  "parTime": 20,
+  "starThresholds": {
+    "two": 39,
+    "three": 20
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  }
+}

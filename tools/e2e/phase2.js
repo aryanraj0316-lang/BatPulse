@@ -165,7 +165,7 @@ async function reachFinish(h) {
         await sleep(900);
       }
     }
-    check('Next is hidden after the last level of the chapter', !(await h.exists('btn-next')));
+    check('after Echo 20 the game continues: Next leads into Chapter 2', await h.exists('btn-next'));
 
     // ---- home, level select shows progress
     await h.tapTestId('btn-home');

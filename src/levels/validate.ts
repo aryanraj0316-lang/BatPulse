@@ -68,6 +68,7 @@ export function validateLevel(raw: unknown): string[] {
     if (!e || e.type !== 'hunter') bad(`enemies[${i}].type must be "hunter"`);
     else if (!Array.isArray(e.waypoints) || e.waypoints.length < 1 || !e.waypoints.every(isPt)) bad(`enemies[${i}].waypoints needs >= 1 valid point`);
     else if (e.speed !== 'slow' && e.speed !== 'fast') bad(`enemies[${i}].speed must be slow|fast`);
+    else if (e.phaseSec !== undefined && !(isNum(e.phaseSec) && e.phaseSec >= 0)) bad(`enemies[${i}].phaseSec must be >= 0`);
   });
   arr('checkpoints').forEach((c, i) => {
     if (!isPt(c)) bad(`checkpoints[${i}] invalid`);

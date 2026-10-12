@@ -14,7 +14,7 @@ interface DevPanelProps {
 const TOGGLES: { key: keyof DebugFlags; label: string }[] = [
   { key: 'unlimitedShards', label: 'Unlimited shards' },
   { key: 'showHitboxes', label: 'Show hitboxes' },
-  { key: 'showHearing', label: 'Show enemy hearing radius (needs enemies, Phase 3)' },
+  { key: 'showHearing', label: 'Hunter hearing radius, state and target' },
   { key: 'showFps', label: 'FPS counter' },
   { key: 'slowMotion', label: 'Slow motion (0.3x)' },
 ];

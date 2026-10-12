@@ -1,0 +1,155 @@
+{
+  "id": 22,
+  "name": "Two Watchers",
+  "chapter": 2,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 70,
+    "y": 590
+  },
+  "finish": {
+    "x": 290,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 20,
+      "width": 40,
+      "height": 140,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 20,
+      "width": 40,
+      "height": 140,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 240,
+      "width": 40,
+      "height": 240,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 240,
+      "width": 40,
+      "height": 240,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 560,
+      "width": 40,
+      "height": 100,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 560,
+      "width": 40,
+      "height": 100,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 100,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 160,
+      "y": 640,
+      "width": 60,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 260,
+      "y": 640,
+      "width": 100,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 190,
+          "y": 90
+        },
+        {
+          "x": 190,
+          "y": 330
+        }
+      ],
+      "speed": "slow",
+      "phaseSec": 0
+    },
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 190,
+          "y": 380
+        },
+        {
+          "x": 190,
+          "y": 600
+        }
+      ],
+      "speed": "slow",
+      "phaseSec": 2
+    }
+  ],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 4
+  },
+  "ghostPulseLimit": 4,
+  "parTime": 27,
+  "starThresholds": {
+    "two": 53,
+    "three": 27
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  }
+}

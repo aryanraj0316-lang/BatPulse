@@ -7,7 +7,9 @@ import { audio } from '../audio';
 import { Controls } from '../components/Controls';
 import { HUD, HudSnapshot } from '../components/HUD';
 import { HintBanner, StickVisual } from '../components/Overlays';
+import { FailScreen } from '../components/FailScreen';
 import { PauseMenu } from '../components/PauseMenu';
+import { JumpGate } from '../game/jumpGate';
 import { ResultCard, ResultData } from '../components/ResultCard';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { PALETTE } from '../constants/palette';
@@ -99,6 +101,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
         glowBonusSec: character.glowBonusSec,
         momentumRateMult: character.momentumRateMult,
         momentumMax: character.momentumCap,
+        hearingMult: character.hearingMult,
       }),
     // a new sim only when the level or the character changes; the radius is updated in place below
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,6 +117,8 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
   const [snap, setSnap] = useState<HudSnapshot>(() => makeSnapshot(sim));
   const [hint, setHint] = useState<string | null>(sim.hints.current);
   const [fps, setFps] = useState(0);
+  const [fail, setFail] = useState<{ jump: boolean } | null>(null);
+  const jumpGate = useMemo(() => new JumpGate(), [sim]);
   const [, bumpStick] = useReducer((n: number) => (n + 1) | 0, 0);
 
   useGameLoop({ sim, input, bus, paused, onFps: setFps });
@@ -143,6 +148,15 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
           HapticEngine.death(haptics);
           Analytics.track({ name: 'level_fail', levelId: def.id, cause: sim.failCause ?? 'spike' });
           Analytics.track({ name: 'pulses_used', levelId: def.id, count: sim.pulsesUsed });
+          // being caught by a hunter shows the fail screen (dark jump effect at most once in a while)
+          if (sim.failCause === 'enemy') setFail({ jump: jumpGate.tryPlay(Date.now() / 1000) });
+          break;
+        case 'enemy_alert':
+          audio.play('sfx_enemy_alert');
+          HapticEngine.wraithAlert(haptics);
+          break;
+        case 'heartbeat':
+          audio.play('sfx_heartbeat', 0.35 + 0.65 * sim.threat); // louder as the hunter gets closer
           break;
         case 'switch':
           audio.play('sfx_switch');
@@ -166,10 +180,12 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
           const momentum = sim.momentum.value;
           const bestMomentum = sim.momentum.best;
           // the debug test chamber (id 0) never touches the player's save
+          const ghostRun = sim.isGhostRun;
           const res =
             def.id === 0
-              ? { firstClear: false, shardsEarned: 0, isNewBestTime: false, newBestStars: false }
-              : recordVictory(def.id, { timeSec, stars, momentum, bestMomentum });
+              ? { firstClear: false, shardsEarned: 0, isNewBestTime: false, newBestStars: false, ghostBonus: 0 }
+              : recordVictory(def.id, { timeSec, stars, momentum, bestMomentum, ghostRun });
+          if (ghostRun) Analytics.track({ name: 'ghost_run', levelId: def.id });
           Analytics.track({ name: 'level_complete', levelId: def.id, timeSec, stars, pulses: sim.pulsesUsed, momentum: bestMomentum });
           Analytics.track({ name: 'pulses_used', levelId: def.id, count: sim.pulsesUsed });
           const nextStarAt = stars === 3 ? null : stars === 2 ? def.starThresholds.three : def.starThresholds.two;
@@ -180,6 +196,8 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
             score: scoreFor(timeSec, def.parTime, momentum),
             shardsEarned: res.shardsEarned,
             isNewBestTime: res.isNewBestTime,
+            ghostRun,
+            ghostBonus: res.ghostBonus,
             nextStarAt,
           });
           break;
@@ -189,7 +207,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
     return () => {
       sim.onEvent = null;
     };
-  }, [sim, def, recordVictory]);
+  }, [sim, def, recordVictory, jumpGate]);
 
   /* ───────────── HUD snapshot ~10x per second ───────────── */
   useEffect(() => {
@@ -270,6 +288,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
     input.cancelAll();
     sim.restart();
     setResult(null);
+    setFail(null);
     setPaused(false);
     bumpStick();
     setSnap(makeSnapshot(sim));
@@ -318,6 +337,8 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
       />
 
       <DebugOverlay sim={sim} bus={bus} screenW={SW} screenH={SH} scale={view.scale} offsetX={view.offsetX} offsetY={view.offsetY} fps={fps} />
+
+      {fail && sim.status === 'dying' && sim.failCause === 'enemy' && <FailScreen jump={fail.jump} onRetry={restart} onHome={onExitToMenu} />}
 
       <PauseMenu visible={paused && result === null} onResume={() => setPaused(false)} onRestart={restart} onHome={onExitToMenu} />
 

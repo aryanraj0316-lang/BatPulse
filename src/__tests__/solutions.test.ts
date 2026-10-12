@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { authoredLevelIds, loadAuthoredLevel } from '../levels/loader';
 import { CHAPTERS } from '../levels/chapters';
-import { flyTimed } from './helpers/timedBot';
+import { findLoudSolution, flyTimed, LoudVariant } from './helpers/timedBot';
 import { flyLevel } from './helpers/levelBot';
 
 /**
@@ -10,8 +10,14 @@ import { flyLevel } from './helpers/levelBot';
  * Regenerate with:  WRITE_DOCS=1 npx jest solutions     (the test fails if the committed file is stale)
  */
 const DOC = path.join(__dirname, '..', '..', 'docs', 'LEVEL_SOLUTIONS.md');
+const LOUD = path.join(__dirname, '..', '..', 'docs', 'loud_solutions.json');
+const readLoud = (): Record<string, LoudVariant> => (fs.existsSync(LOUD) ? JSON.parse(fs.readFileSync(LOUD, 'utf8')) : {});
+
+let loudTableForWrite: Record<string, LoudVariant> = {};
 
 function build(): string {
+  const loudTable: Record<string, LoudVariant> = process.env.WRITE_DOCS ? {} : readLoud();
+  loudTableForWrite = loudTable;
   const lines: string[] = [
     '# Level solutions (generated)',
     '',
@@ -23,9 +29,10 @@ function build(): string {
   for (const ch of CHAPTERS) {
     lines.push(`## Chapter ${ch.id}: ${ch.name}`, '', '| Echo | Name | Sonar | Elements | Clean time | Pulses used | 3 stars | 2 stars |', '|---|---|---|---|---|---|---|---|');
     const details: string[] = [];
+    const loudNotes: Record<number, string> = {};
     for (const id of authoredLevelIds().filter((i) => i >= ch.first && i <= ch.last).sort((a, b) => a - b)) {
       const def = loadAuthoredLevel(id, true)!;
-      const dynamic = def.movingHazards.length > 0 || def.switches.length > 0;
+      const dynamic = def.movingHazards.length > 0 || def.switches.length > 0 || def.enemies.length > 0;
       let time: number;
       let pulses = 0;
       let trace = '';
@@ -33,6 +40,21 @@ function build(): string {
       if (dynamic) {
         const r = flyTimed(def);
         if (!r.finished) throw new Error(`level ${id} is not solvable: ${r.failedAt}`);
+        if (def.enemies.length > 0) {
+          if (!r.ghost) throw new Error(`level ${id}: the stealth route is not a ghost run`);
+          // the loud solution: found by search when regenerating, replayed from the table otherwise
+          let v: LoudVariant | undefined = loudTable[id];
+          if (process.env.WRITE_DOCS) {
+            const found = findLoudSolution(def);
+            if (!found) throw new Error(`level ${id} has no loud solution`);
+            v = found.variant;
+            loudTable[id] = v;
+          }
+          if (!v) throw new Error(`level ${id}: missing from loud_solutions.json (run WRITE_DOCS=1)`);
+          const loud = flyTimed(def, {}, 'loud', v);
+          if (!loud.finished || loud.deaths > 0 || loud.alerts === 0) throw new Error(`level ${id}: recorded loud solution no longer works`);
+          loudNotes[id] = `Loud solution: wait ${v.startDelay} s, then pulse every ${v.noiseEvery} s from t=${v.noiseFrom} s; hunters alerted ${loud.alerts}x, finished in ${loud.timeSec.toFixed(1)} s.`;
+        }
         time = r.timeSec;
         pulses = r.pulses;
         pulseTimes = r.pulseTimes;
@@ -49,10 +71,18 @@ function build(): string {
       if (def.walls.some((w) => w.type === 'crystal')) el.push('crystal');
       if (def.walls.some((w) => w.type === 'mossy')) el.push('mossy');
       if (def.switches.length) el.push(`${def.switches.length} switch/door`);
+      if (def.enemies.length) el.push(`${def.enemies.length} hunter${def.enemies.length > 1 ? 's' : ''} (${[...new Set(def.enemies.map((e) => e.speed))].join('/')})`);
       if (def.pickups.length) el.push(`${def.pickups.length} pickup`);
       const sonar = def.sonar.mode === 'fixed' ? `fixed ${def.sonar.charges}` : `${def.sonar.charges} / ${def.sonar.rechargeSec}s`;
       lines.push(`| ${id} | ${def.name} | ${sonar} | ${el.join(', ') || '-'} | ${time.toFixed(1)} s | ${pulses} | <= ${def.starThresholds.three} s | <= ${def.starThresholds.two} s |`);
-      details.push(`### Echo ${String(id).padStart(2, '0')} - ${def.name}`, '', `Route: ${trace}`, pulseTimes.length ? `Pulses at: ${pulseTimes.join(', ')} s` : 'Pulses: none needed for the route (a player uses them to see).', '');
+      details.push(
+        `### Echo ${String(id).padStart(2, '0')} - ${def.name}`,
+        '',
+        `${def.enemies.length ? 'Stealth (ghost run) route' : 'Route'}: ${trace}`,
+        pulseTimes.length ? `Pulses at: ${pulseTimes.join(', ')} s` : 'Pulses: none needed for the route (a player uses them to see).',
+        ...(loudNotes[id] ? [loudNotes[id]] : []),
+        '',
+      );
     }
     lines.push('', ...details);
   }
@@ -62,7 +92,10 @@ function build(): string {
 describe('level solution document', () => {
   it('docs/LEVEL_SOLUTIONS.md is up to date with the levels and solves every one', () => {
     const doc = build();
-    if (process.env.WRITE_DOCS) fs.writeFileSync(DOC, doc);
+    if (process.env.WRITE_DOCS) {
+      fs.writeFileSync(DOC, doc);
+      fs.writeFileSync(LOUD, JSON.stringify(loudTableForWrite, null, 2) + '\n');
+    }
     expect(fs.existsSync(DOC)).toBe(true);
     expect(fs.readFileSync(DOC, 'utf8').replace(/\r/g, '')).toBe(doc);
   });

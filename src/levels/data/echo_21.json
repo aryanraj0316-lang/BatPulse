@@ -1,0 +1,138 @@
+{
+  "id": 21,
+  "name": "Listening Post",
+  "chapter": 2,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 70,
+    "y": 590
+  },
+  "finish": {
+    "x": 290,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 20,
+      "width": 40,
+      "height": 420,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 20,
+      "width": 40,
+      "height": 420,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 520,
+      "width": 40,
+      "height": 140,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 520,
+      "width": 40,
+      "height": 140,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 100,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 160,
+      "y": 640,
+      "width": 60,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 260,
+      "y": 640,
+      "width": 100,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 190,
+          "y": 80
+        },
+        {
+          "x": 190,
+          "y": 560
+        }
+      ],
+      "speed": "slow",
+      "phaseSec": 0
+    }
+  ],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 4
+  },
+  "ghostPulseLimit": 4,
+  "parTime": 20,
+  "starThresholds": {
+    "two": 39,
+    "three": 20
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  },
+  "hints": [
+    {
+      "text": "Hunters hear your pulses. Pulse far from them.",
+      "until": "seconds",
+      "seconds": 8
+    },
+    {
+      "text": "A heartbeat means one is close.",
+      "until": "seconds",
+      "seconds": 6
+    }
+  ]
+}

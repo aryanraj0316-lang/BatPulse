@@ -1,0 +1,77 @@
+{
+  "21": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2
+  },
+  "22": {
+    "startDelay": 3,
+    "noiseEvery": 1,
+    "noiseFrom": 9
+  },
+  "23": {
+    "startDelay": 8,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2
+  },
+  "24": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 7
+  },
+  "25": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 9
+  },
+  "26": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2
+  },
+  "27": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 5
+  },
+  "28": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 7
+  },
+  "29": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2
+  },
+  "30": {
+    "startDelay": 8,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2
+  },
+  "31": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 7
+  },
+  "32": {
+    "startDelay": 5,
+    "noiseEvery": 1,
+    "noiseFrom": 7
+  },
+  "33": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 7
+  },
+  "34": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 9
+  },
+  "35": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 7
+  }
+}

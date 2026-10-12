@@ -1,5 +1,6 @@
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { Body, Box, circleOverlapsBox, resolveCircleBoxes } from './collision';
+import { EnemySystem } from './enemy';
 import { circleHitsHazard, HazardPose, hazardPose, segmentHitsBox } from './hazards';
 import { HintTracker } from './hints';
 import { Momentum } from './momentum';
@@ -17,9 +18,11 @@ export type SimEvent =
   | 'switch'
   | 'door_open'
   | 'door_close'
-  | 'pickup';
+  | 'pickup'
+  | 'enemy_alert'
+  | 'heartbeat';
 export type SimStatus = 'playing' | 'dying' | 'won';
-export type FailCause = 'spike' | 'hazard';
+export type FailCause = 'spike' | 'hazard' | 'enemy';
 
 export interface SimParams {
   /** Pulse radius in world units. */
@@ -29,6 +32,8 @@ export interface SimParams {
   /** Momentum rate multiplier and cap (Turbo Moth). */
   momentumRateMult?: number;
   momentumMax?: number;
+  /** Phantom: how much enemies hear of the bat's pulses (0.5 = half the range). */
+  hearingMult?: number;
 }
 
 const HALF_PI = Math.PI / 2;
@@ -66,6 +71,17 @@ export class GameSim {
   readonly doorTimer: Float32Array;
   /** 1 once a pickup has been collected this attempt. */
   readonly pickupTaken: Uint8Array;
+  readonly enemies: EnemySystem;
+  /** 0..1: how close the nearest hunter is (heartbeat and red screen edge). */
+  threat = 0;
+  /** Seconds since the last heartbeat, for the edge pulse. */
+  beatAge = 99;
+  /** Faint rings where recent pulses were made (so a hunter's arrival is explainable). */
+  readonly markerX = new Float32Array(4);
+  readonly markerY = new Float32Array(4);
+  readonly markerAge = new Float32Array(4).fill(Infinity);
+  private beatTimer = 0;
+  private readonly enemyReveal: number[];
 
   private inX = 0;
   private inY = 0;
@@ -99,8 +115,11 @@ export class GameSim {
     this.doorBoxes = world.doors.map((d) => ({ x: d.x, y: d.y, width: d.width, height: d.height }));
     this.hazardReveal = world.hazards.map((_, i) => world.revealables.findIndex((r) => r.kind === 'hazard' && r.ref === i));
     this.switchDoors = world.switches.map((_, si) => world.doorSwitch.map((s, di) => (s === si ? di : -1)).filter((d) => d >= 0));
+    this.enemyReveal = world.enemies.map((_, i) => world.revealables.findIndex((r) => r.kind === 'enemy' && r.ref === i));
+    this.enemies = new EnemySystem(world, { onAlert: () => this.onEvent?.('enemy_alert') });
     this.rebuildClosedDoors();
     this.syncHazards();
+    this.syncEnemyBoxes();
   }
 
   /** Joystick output, already dead-zoned, magnitude 0..1. */
@@ -120,6 +139,21 @@ export class GameSim {
 
   isDoorOpen(i: number): boolean {
     return this.doorTimer[i] > 0;
+  }
+
+  /** Number of times a hunter went from calm to hunting this attempt. */
+  get alertCount(): number {
+    return this.enemies.alertCount;
+  }
+
+  /** Completed (so far) with no hunter ever alerted and within the level's pulse limit. */
+  get isGhostRun(): boolean {
+    return this.enemies.alertCount === 0 && this.pulsesUsed <= this.world.def.ghostPulseLimit;
+  }
+
+  /** How far a pulse is heard by hunters, in world units. */
+  get hearingRadius(): number {
+    return this.params.pulseRadius * ECHO_CONFIG.enemy.hearingRadiusMult * (this.params.hearingMult ?? 1);
   }
 
   /** A switch counts as lit while any of the doors it controls is open. */
@@ -150,8 +184,14 @@ export class GameSim {
     this.hints.reset();
     this.doorTimer.fill(0);
     this.pickupTaken.fill(0);
+    this.enemies.reset();
+    this.threat = 0;
+    this.beatAge = 99;
+    this.beatTimer = 0;
+    this.markerAge.fill(Infinity);
     this.rebuildClosedDoors();
     this.syncHazards();
+    this.syncEnemyBoxes();
     this.attempt++;
     this.onEvent?.('restart');
   }
@@ -167,6 +207,11 @@ export class GameSim {
     this.sincePulse = 0;
     this.pulsesUsed++;
     this.waves.spawn(this.body.x, this.body.y, this.params.pulseRadius);
+    if (this.world.enemies.length > 0) {
+      this.addMarker(this.body.x, this.body.y);
+      // hunters hear pulses inside 1.2x the pulse radius, but not during the spawn safe window
+      if (this.elapsed >= ECHO_CONFIG.enemy.spawnSafeSec) this.enemies.hear(this.body.x, this.body.y, this.hearingRadius, this.closedDoors);
+    }
     this.hints.onPulse();
     this.onEvent?.('pulse');
     return true;
@@ -182,6 +227,7 @@ export class GameSim {
     applyWaves(this.waves, this.world.revealables, this.reveal, this.params.glowBonusSec ?? 0);
     this.hitSwitches();
     this.reveal.update(dt);
+    for (let i = 0; i < this.markerAge.length; i++) this.markerAge[i] += dt;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
 
     if (this.status === 'dying') {
@@ -207,6 +253,7 @@ export class GameSim {
     if (speed > cfg.momentum.movingSpeed) this.hints.onMoved();
 
     this.collectPickups();
+    if (this.stepEnemies(dt)) return;
 
     // spikes kill (hitbox slightly smaller than drawn, see config)
     const spikes = this.world.spikes;
@@ -246,6 +293,57 @@ export class GameSim {
         r.y = p.y;
       }
     }
+  }
+
+  /** Moves each hunter's reveal box to where the hunter is. */
+  private syncEnemyBoxes() {
+    const en = this.enemies.enemies;
+    for (let i = 0; i < en.length; i++) {
+      const r = this.world.revealables[this.enemyReveal[i]];
+      if (r) {
+        r.x = en[i].body.x - ECHO_CONFIG.enemy.radius;
+        r.y = en[i].body.y - ECHO_CONFIG.enemy.radius;
+      }
+    }
+  }
+
+  private addMarker(x: number, y: number) {
+    // reuse the oldest slot
+    let slot = 0;
+    for (let i = 1; i < this.markerAge.length; i++) if (this.markerAge[i] > this.markerAge[slot]) slot = i;
+    this.markerX[slot] = x;
+    this.markerY[slot] = y;
+    this.markerAge[slot] = 0;
+  }
+
+  /** Moves the hunters, updates the threat level and heartbeat. Returns true when the bat was caught. */
+  private stepEnemies(dt: number): boolean {
+    if (this.world.enemies.length === 0) return false;
+    const cfg = ECHO_CONFIG.enemy;
+    const b = this.body;
+    const armed = this.elapsed >= cfg.spawnSafeSec;
+    const caught = this.enemies.update(dt, b.x, b.y, b.r, armed, this.closedDoors, this.world.solids);
+    this.syncEnemyBoxes();
+    // heartbeat: starts inside the threat radius and speeds up as the hunter gets closer
+    const range = cfg.threatRadiusTiles * cfg.tileSize;
+    this.threat = Math.max(0, Math.min(1, 1 - this.enemies.nearest / range));
+    this.beatAge += dt;
+    if (this.threat > 0) {
+      this.beatTimer += dt;
+      const interval = cfg.heartbeatSlowSec + (cfg.heartbeatFastSec - cfg.heartbeatSlowSec) * this.threat;
+      if (this.beatTimer >= interval) {
+        this.beatTimer = 0;
+        this.beatAge = 0;
+        this.onEvent?.('heartbeat');
+      }
+    } else {
+      this.beatTimer = 0;
+    }
+    if (caught) {
+      this.die('enemy');
+      return true;
+    }
+    return false;
   }
 
   private rebuildClosedDoors() {
@@ -291,6 +389,11 @@ export class GameSim {
       this.doorTimer[doors[k]] = ECHO_CONFIG.door.openSec;
     }
     if (opened) this.rebuildClosedDoors();
+    // the click carries: hunters nearby come to investigate (a way to draw them off)
+    if (this.world.enemies.length > 0 && this.elapsed >= ECHO_CONFIG.enemy.spawnSafeSec) {
+      const sw = this.world.switches[s];
+      this.enemies.hear(sw.x, sw.y, ECHO_CONFIG.enemy.switchNoiseRadius, this.closedDoors);
+    }
     this.onEvent?.('switch');
     if (opened) this.onEvent?.('door_open');
   }
@@ -400,7 +503,8 @@ export class GameSim {
     this.status = 'dying';
     this.failCause = cause;
     this.shake = ECHO_CONFIG.death.shakeSec;
-    this.deathTimer = ECHO_CONFIG.death.restartDelaySec;
+    // being caught shows the fail screen (the player chooses to retry); other deaths restart by themselves
+    this.deathTimer = cause === 'enemy' ? Infinity : ECHO_CONFIG.death.restartDelaySec;
     this.body.vx = 0;
     this.body.vy = 0;
     this.onEvent?.('death');

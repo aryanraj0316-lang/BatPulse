@@ -233,7 +233,7 @@ const EnemyHunter: React.FC<VisualProps> = (p) => {
   const r = Math.min(p.width, p.height) / 2;
   return (
     <G opacity={glowOf(p)}>
-      <Circle cx={p.x} cy={p.y} r={r} fill="#3A0A10" stroke={PALETTE.wraithRed} strokeWidth={1.5} />
+      <Circle cx={p.x} cy={p.y} r={r} fill={p.active ? '#6A0F1C' : '#3A0A10'} stroke={p.active ? '#FFFFFF' : PALETTE.wraithRed} strokeWidth={p.active ? 2.5 : 1.5} />
       <Path d={`M${p.x - r * 0.6},${p.y} Q${p.x},${p.y - r * 0.6} ${p.x + r * 0.6},${p.y} Q${p.x},${p.y + r * 0.6} ${p.x - r * 0.6},${p.y} Z`} fill={PALETTE.wraithRed} />
       <Circle cx={p.x} cy={p.y} r={r * 0.18} fill="#04060A" />
     </G>
@@ -249,6 +249,18 @@ const PulseWave: React.FC<VisualProps> = (p) => {
     <G opacity={fade}>
       <Circle cx={p.x} cy={p.y} r={Math.max(1, r)} stroke={PALETTE.sonarCyan} strokeWidth={2.5} fill="none" />
       <Circle cx={p.x} cy={p.y} r={Math.max(1, r * 0.85)} stroke={PALETTE.sonarCyan} strokeWidth={1.2} fill="none" strokeDasharray="5 4" opacity={0.7} />
+    </G>
+  );
+};
+
+/** Faint ring where a pulse was made; progress 0..1 is its age (it fades out). */
+const SoundMarker: React.FC<VisualProps> = (p) => {
+  const prog = Math.max(0, Math.min(1, p.progress ?? 0));
+  const r = (Math.min(p.width, p.height) / 2) * (0.6 + 0.4 * prog);
+  return (
+    <G opacity={0.55 * (1 - prog)}>
+      <Circle cx={p.x} cy={p.y} r={r} stroke={PALETTE.sonarCyan} strokeWidth={1.2} strokeDasharray="3 4" fill="none" />
+      <Circle cx={p.x} cy={p.y} r={2} fill={PALETTE.sonarCyan} />
     </G>
   );
 };
@@ -282,6 +294,7 @@ export function registerPlaceholderAssets(): void {
     checkpoint: Checkpoint,
     enemy_hunter: EnemyHunter,
     pulse_wave: PulseWave,
+    sound_marker: SoundMarker,
   };
   (Object.keys(visuals) as VisualKey[]).forEach((k) => AssetRegistry.registerVisual(k, visuals[k]));
 

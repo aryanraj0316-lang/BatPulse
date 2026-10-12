@@ -1,0 +1,177 @@
+{
+  "id": 25,
+  "name": "Echoes and Eyes",
+  "chapter": 2,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 70,
+    "y": 590
+  },
+  "finish": {
+    "x": 290,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 20,
+      "width": 40,
+      "height": 180,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 20,
+      "width": 40,
+      "height": 180,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 280,
+      "width": 40,
+      "height": 200,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 280,
+      "width": 40,
+      "height": 200,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 560,
+      "width": 40,
+      "height": 100,
+      "type": "normal"
+    },
+    {
+      "x": 220,
+      "y": 560,
+      "width": 40,
+      "height": 100,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 100,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 160,
+      "y": 640,
+      "width": 60,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 260,
+      "y": 640,
+      "width": 100,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [
+    {
+      "id": "s1",
+      "x": 50,
+      "y": 570,
+      "radius": 14
+    }
+  ],
+  "doors": [
+    {
+      "id": "d_a_220_200",
+      "x": 220,
+      "y": 200,
+      "width": 40,
+      "height": 80,
+      "switchId": "s1"
+    }
+  ],
+  "pickups": [
+    {
+      "type": "charge",
+      "x": 70,
+      "y": 410
+    }
+  ],
+  "enemies": [
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 190,
+          "y": 90
+        },
+        {
+          "x": 190,
+          "y": 360
+        }
+      ],
+      "speed": "slow",
+      "phaseSec": 0
+    },
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 190,
+          "y": 400
+        },
+        {
+          "x": 190,
+          "y": 610
+        }
+      ],
+      "speed": "slow",
+      "phaseSec": 1
+    }
+  ],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "fixed",
+    "charges": 5,
+    "rechargeSec": 0
+  },
+  "ghostPulseLimit": 4,
+  "parTime": 29,
+  "starThresholds": {
+    "two": 57,
+    "three": 29
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  }
+}

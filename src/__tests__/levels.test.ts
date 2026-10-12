@@ -175,7 +175,8 @@ describe('data file -> world', () => {
 describe('level data matches its ASCII sources', () => {
   it('npm run levels is up to date (no stale JSON)', () => {
     const { spawnSync } = require('child_process');
-    const r = spawnSync(process.execPath, ['tools/buildLevels.js', '--check'], { cwd: process.cwd(), encoding: 'utf8' });
+    const root = require('path').join(__dirname, '..', '..'); // independent of where jest was started
+    const r = spawnSync(process.execPath, [require('path').join(root, 'tools', 'buildLevels.js'), '--check'], { cwd: root, encoding: 'utf8' });
     expect(r.stderr + r.stdout).toBe('');
     expect(r.status).toBe(0);
   });

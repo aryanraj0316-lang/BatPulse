@@ -44,7 +44,7 @@ export const ECHO_CONFIG = {
   },
   rewards: {
     starShards: { 1: 20, 2: 35, 3: 50 } as Record<number, number>,
-    ghostRunBonus: 25,
+    ghostRunBonus: 25, // first time a level is completed as a Ghost Run
     replayFactor: 0.25, // replays pay this share of a first clear
     dailyLoginMin: 50,
     dailyLoginMax: 100,
@@ -52,15 +52,29 @@ export const ECHO_CONFIG = {
     dailyStreakDays: 7,
   },
   enemy: {
+    radius: 16,
     hearingRadiusMult: 1.2, // x pulse radius
-    spawnSafeSec: 3,
-    slowHunterSpeedMult: 0.85, // vs player's max speed
+    spawnSafeSec: 3, // hunters ignore everything for this long after an attempt starts
+    slowHunterSpeedMult: 0.85, // x the player's max speed (15% slower)
     fastHunterSpeedMult: 1.0,
-    visibleOnHitSec: 1,
-    alertToChaseSec: 1.5,
+    patrolSpeedFactor: 0.55, // patrol is slow: this share of the hunter's chase speed
+    visibleOnHitSec: 1, // a wave shows a hunter for this long
+    alertToChaseSec: 1.5, // reach = chase speed x this: close enough to lock on
     lostSearchSec: 4,
-    threatRadiusTiles: 5,
-    chaseRadiusTiles: 1.5,
+    senseRadius: 55, // a hunter notices the bat directly inside this distance (with a clear line)
+    loseDistanceMult: 1.8, // x reach: beyond this a chase is given up
+    loseNoSightSec: 2, // chase also ends after this long without a clear line
+    repathSec: 0.25, // how often a chasing hunter re-plans its route
+    dwellSec: 0.6, // pause at each patrol waypoint
+    searchSway: 50, // how far a searching hunter wanders around the last known spot
+    tileSize: 20,
+    threatRadiusTiles: 5, // heartbeat and red edge start inside this many tiles
+    switchNoiseRadius: 180, // a switch click is heard this far away
+    soundMarkerSec: 2, // how long the ring stays where a pulse was made
+    heartbeatSlowSec: 1,
+    heartbeatFastSec: 0.35,
+    jumpEffectCooldownSec: 25, // the dark jump effect is not repeated more often than this
+    jumpEffectMaxPerLevel: 2,
   },
   door: {
     openSec: 8,

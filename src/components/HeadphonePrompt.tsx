@@ -15,7 +15,7 @@ export const HeadphonePrompt: React.FC<HeadphonePromptProps> = ({ visible, onPro
           <Text style={styles.icon}>🎧</Text>
           <Text style={styles.title}>HEADPHONES STRONGLY RECOMMENDED</Text>
           <Text style={styles.description}>
-            Bats View relies heavily on directional acoustic echoes and spatial audio cues to perceive the labyrinth and track the blind predator.
+            Echolocation relies on directional sound cues and spatial audio. Headphones make the pulses, echoes and the hunters' heartbeat much clearer.
           </Text>
 
           <TouchableOpacity style={styles.button} onPress={onProceed} activeOpacity={0.8}>

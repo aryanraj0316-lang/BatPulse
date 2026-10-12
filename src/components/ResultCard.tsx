@@ -10,6 +10,10 @@ export interface ResultData {
   score: number;
   shardsEarned: number;
   isNewBestTime: boolean;
+  /** Completed with no hunter alerted and within the pulse limit. */
+  ghostRun: boolean;
+  /** Shards from the first-time Ghost Run bonus (0 when already earned). */
+  ghostBonus: number;
   /** seconds needed for the next star, if not at 3 stars */
   nextStarAt: number | null;
 }
@@ -43,6 +47,12 @@ export const ResultCard: React.FC<Props> = ({ visible, levelNumber, levelTitle, 
         </View>
         {result.nextStarAt !== null && (
           <Text style={styles.hint}>{result.stars === 1 ? '★★' : '★★★'} under {Math.floor(result.nextStarAt)}s</Text>
+        )}
+
+        {result.ghostRun && (
+          <View style={styles.ghost} testID="ghost-badge">
+            <Text style={styles.ghostText}>🦇 GHOST RUN{result.ghostBonus > 0 ? `  +${result.ghostBonus} ✦` : ''}</Text>
+          </View>
         )}
 
         <View style={styles.grid}>
@@ -100,6 +110,8 @@ const styles = StyleSheet.create({
   starsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   starIcon: { fontSize: 38 },
   hint: { fontSize: 10, color: '#94A3B8', letterSpacing: 1, marginTop: 2 },
+  ghost: { marginTop: 10, borderRadius: 6, borderWidth: 1, borderColor: PALETTE.goalViolet, paddingHorizontal: 12, paddingVertical: 5, backgroundColor: 'rgba(180,125,255,0.12)' },
+  ghostText: { color: PALETTE.goalViolet, fontWeight: '800', fontSize: 11, letterSpacing: 2 },
   grid: { width: '100%', marginTop: 16, gap: 8 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowLabel: { fontSize: 10, color: '#64748B', fontWeight: '700', letterSpacing: 1.5 },

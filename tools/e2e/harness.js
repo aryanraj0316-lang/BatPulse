@@ -89,8 +89,21 @@ async function launch({ outDir, width = 390, height = 844, port = 9333, fresh = 
     logs,
     sleep,
     send,
+    /** Navigates and (for http pages) waits until the app has really rendered something, however long a cold bundle takes. */
     async goto(url) {
       await send('Page.navigate', { url });
+      if (!url.startsWith('http')) return;
+      const t0 = Date.now();
+      while (Date.now() - t0 < 180000) {
+        await sleep(1500);
+        try {
+          const len = await h.eval('document.body ? document.body.innerText.length : 0');
+          if (len > 20) return;
+        } catch {
+          // the page is still busy loading its bundle: keep waiting
+        }
+      }
+      throw new Error('page did not render within 180 s');
     },
     async eval(expr) {
       const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
@@ -107,8 +120,9 @@ async function launch({ outDir, width = 390, height = 844, port = 9333, fresh = 
     /** Text of the element with this testID (RN-web renders testID as data-testid). */
     text: (testID) => h.eval(`(document.querySelector('[data-testid="${testID}"]')||{}).innerText||null`),
     exists: (testID) => h.eval(`!!document.querySelector('[data-testid="${testID}"]')`),
+    // scrolls the element into view first (like a player would), then returns its centre
     clickTestId: (testID) =>
-      h.eval(`(()=>{const e=document.querySelector('[data-testid="${testID}"]');if(!e)return false;const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`),
+      h.eval(`(()=>{const e=document.querySelector('[data-testid="${testID}"]');if(!e)return false;e.scrollIntoView({block:'center',inline:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`),
     /** Real tap (touch down + up) in the middle of an element. */
     async tapTestId(testID) {
       const p = await h.clickTestId(testID);
@@ -121,6 +135,14 @@ async function launch({ outDir, width = 390, height = 844, port = 9333, fresh = 
       return h.eval(
         `(()=>{const els=[...document.querySelectorAll('div,span')].filter(e=>e.children.length===0&&e.textContent.trim().toUpperCase().includes(${JSON.stringify(txt.toUpperCase())}));if(!els.length)return false;const t=els[els.length-1];['mousedown','mouseup','click'].forEach(n=>t.dispatchEvent(new MouseEvent(n,{bubbles:true})));return true;})()`,
       );
+    },
+    /**
+     * Writes a save into the page's storage in the game's envelope format (checksummed), so a scenario can start
+     * from any progress state. Call before (re)loading the app.
+     */
+    async seedSave(save) {
+      const body = JSON.stringify(save);
+      await h.eval(`(()=>{const body=${JSON.stringify(body)};let h=0x811c9dc5;for(let i=0;i<body.length;i++){h^=body.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}const cs=h.toString(16).padStart(8,'0');const env=JSON.stringify({saveVersion:${save.saveVersion},checksum:cs,body});localStorage.setItem('echo.save.primary',env);localStorage.setItem('echo.save.backup',env);})()`);
     },
     async close() {
       try {

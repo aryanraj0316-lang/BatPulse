@@ -1,8 +1,8 @@
-import { DoorDef, LevelDef, MovingHazardDef, PickupDef, SwitchDef, WallType } from '../levels/schema';
+import { DoorDef, EnemyDef, LevelDef, MovingHazardDef, PickupDef, SwitchDef, WallType } from '../levels/schema';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { Box } from './collision';
 
-export type RevealKind = 'wall' | 'spike' | 'finish' | 'hazard' | 'switch' | 'door' | 'pickup';
+export type RevealKind = 'wall' | 'spike' | 'finish' | 'hazard' | 'switch' | 'door' | 'pickup' | 'enemy';
 
 /** Something a pulse can light up. Static: built once per level load. */
 export interface Revealable extends Box {
@@ -27,6 +27,7 @@ export interface World {
   doors: DoorDef[];
   doorSwitch: number[];
   pickups: PickupDef[];
+  enemies: EnemyDef[];
 }
 
 /** Splits a box along its longer axis into pieces no longer than maxLen. */
@@ -82,6 +83,10 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
   def.doors.forEach((d, i) => revealables.push({ x: d.x, y: d.y, width: d.width, height: d.height, kind: 'door', variant: 'normal', ref: i }));
   const pr = ECHO_CONFIG.pickup.radius;
   def.pickups.forEach((p, i) => revealables.push({ x: p.x - pr, y: p.y - pr, width: pr * 2, height: pr * 2, kind: 'pickup', variant: 'normal', ref: i }));
+  const er = ECHO_CONFIG.enemy.radius;
+  def.enemies.forEach((e, i) =>
+    revealables.push({ x: e.waypoints[0].x - er, y: e.waypoints[0].y - er, width: er * 2, height: er * 2, kind: 'enemy', variant: 'normal', ref: i }),
+  );
   const finish = { x: def.finish.x, y: def.finish.y, radius: def.finish.radius ?? 18 };
   revealables.push({
     x: finish.x - finish.radius,
@@ -103,6 +108,7 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
     doors: def.doors,
     doorSwitch,
     pickups: def.pickups,
+    enemies: def.enemies,
   };
 }
 

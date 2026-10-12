@@ -1,4 +1,5 @@
 import { LevelRecord } from '../types/game';
+import { ECHO_CONFIG } from '../constants/gameConfig';
 import { shardsFor } from '../sim/scoring';
 
 export interface VictoryRun {
@@ -8,6 +9,8 @@ export interface VictoryRun {
   momentum: number;
   /** Highest multiplier reached during the run (shown and recorded). */
   bestMomentum: number;
+  /** No hunter was ever alerted and pulses stayed within the level's ghost limit. */
+  ghostRun?: boolean;
 }
 
 export interface VictoryResult {
@@ -15,6 +18,8 @@ export interface VictoryResult {
   shardsEarned: number;
   isNewBestTime: boolean;
   newBestStars: boolean;
+  /** Shards from the first-time Ghost Run bonus (included in shardsEarned). */
+  ghostBonus: number;
 }
 
 export const emptyRecord = (levelId: number, unlocked = false): LevelRecord => ({
@@ -39,7 +44,9 @@ export function applyVictory(
 ): { records: Record<number, LevelRecord>; shards: number; result: VictoryResult } {
   const existing = records[levelId] ?? emptyRecord(levelId, true);
   const firstClear = !existing.completed;
-  const shardsEarned = shardsFor({ stars: run.stars, momentum: run.momentum, firstClear });
+  // the Ghost Run bonus is paid once per level, the first time it is achieved
+  const ghostBonus = run.ghostRun && !existing.ghostRun ? ECHO_CONFIG.rewards.ghostRunBonus : 0;
+  const shardsEarned = shardsFor({ stars: run.stars, momentum: run.momentum, firstClear }) + ghostBonus;
 
   const updated: LevelRecord = {
     ...existing,
@@ -48,6 +55,7 @@ export function applyVictory(
     stars: Math.max(existing.stars, run.stars),
     bestTime: existing.bestTime === null ? run.timeSec : Math.min(existing.bestTime, run.timeSec),
     bestMomentum: existing.bestMomentum === null ? run.bestMomentum : Math.max(existing.bestMomentum, run.bestMomentum),
+    ghostRun: existing.ghostRun || !!run.ghostRun,
   };
   const next = records[levelId + 1] ?? emptyRecord(levelId + 1);
   const nextRecords = {
@@ -63,6 +71,7 @@ export function applyVictory(
       shardsEarned,
       isNewBestTime: existing.bestTime === null || run.timeSec < existing.bestTime,
       newBestStars: run.stars > existing.stars,
+      ghostBonus,
     },
   };
 }

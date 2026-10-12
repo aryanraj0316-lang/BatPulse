@@ -43,8 +43,11 @@ export interface PickupDef {
 }
 export interface EnemyDef {
   type: EnemyKind;
+  /** Patrol route in world units, walked as a loop (two points = back and forth). */
   waypoints: LevelPoint[];
   speed: 'slow' | 'fast';
+  /** Seconds into the patrol cycle at spawn, so several hunters can be out of step. */
+  phaseSec?: number;
 }
 export type CheckpointDef = LevelPoint;
 export interface SonarDef {

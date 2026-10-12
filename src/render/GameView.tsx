@@ -118,10 +118,35 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
           />,
         );
         break;
+      case 'enemy': {
+        const en = sim.enemies.enemies[ref];
+        pieces.push(
+          <Piece
+            key={i}
+            visual="enemy_hunter"
+            x={Math.round(en.body.x * 2) / 2}
+            y={Math.round(en.body.y * 2) / 2}
+            w={ECHO_CONFIG.enemy.radius * 2}
+            h={ECHO_CONFIG.enemy.radius * 2}
+            glow={g}
+            active={en.state === 'chase'}
+          />,
+        );
+        break;
+      }
       case 'pickup':
         if (!sim.pickupTaken[ref]) pieces.push(<Piece key={i} visual="pickup_charge" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
         break;
     }
+  }
+
+  // faint rings where recent pulses were made: explains why a hunter is coming
+  const Marker = AssetRegistry.getVisual('sound_marker');
+  const markers: React.ReactNode[] = [];
+  for (let m = 0; m < sim.markerAge.length; m++) {
+    const age = sim.markerAge[m];
+    if (age >= ECHO_CONFIG.enemy.soundMarkerSec) continue;
+    markers.push(<Marker key={`m${m}`} x={sim.markerX[m]} y={sim.markerY[m]} width={56} height={56} progress={age / ECHO_CONFIG.enemy.soundMarkerSec} />);
   }
 
   const waves: React.ReactNode[] = [];
@@ -137,6 +162,7 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
   return (
     <Svg width={screenW} height={screenH} style={{ position: 'absolute', left: 0, top: 0 }}>
       <G transform={`translate(${offsetX + shakeX} ${offsetY + shakeY}) scale(${scale})`}>
+        {markers}
         {pieces}
         {waves}
         <Bat

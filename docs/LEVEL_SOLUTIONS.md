@@ -129,3 +129,113 @@ Pulses at: 6 s
 Route: (71,590)@0s -> (216,605)@1.5s -> (241,605)@3s -> (285,467)@4.6s -> (176,434)@6.1s -> (95,355)@7.6s -> (164,275)@9.1s -> (285,166)@10.6s -> (176,115)@12.1s
 Pulses at: 1.8, 7.4 s
 
+## Chapter 2: The Listening Deep
+
+| Echo | Name | Sonar | Elements | Clean time | Pulses used | 3 stars | 2 stars |
+|---|---|---|---|---|---|---|---|
+| 21 | Listening Post | 3 / 4s | 1 hunter (slow) | 6.4 s | 0 | <= 20 s | <= 39 s |
+| 22 | Two Watchers | 3 / 4s | 2 hunters (slow) | 8.8 s | 0 | <= 27 s | <= 53 s |
+| 23 | Spiked Hall | 3 / 4s | spikes, 1 hunter (slow) | 6.5 s | 0 | <= 20 s | <= 39 s |
+| 24 | Locked Crossing | fixed 5 | 1 switch/door, 1 hunter (slow) | 10.8 s | 1 | <= 33 s | <= 65 s |
+| 25 | Echoes and Eyes | fixed 5 | 1 switch/door, 2 hunters (slow), 1 pickup | 9.4 s | 1 | <= 29 s | <= 57 s |
+| 26 | Rhythm | 3 / 4s | slider, 1 hunter (slow) | 6.7 s | 0 | <= 21 s | <= 41 s |
+| 27 | Crossfire | 3 / 4s | spikes, 2 hunters (slow) | 6.6 s | 0 | <= 20 s | <= 40 s |
+| 28 | Silent Descent | fixed 5 | blade, 1 switch/door, 2 hunters (slow), 1 pickup | 8.1 s | 1 | <= 25 s | <= 49 s |
+| 29 | Fast Pursuit | 3 / 4s | 1 hunter (fast) | 6.4 s | 0 | <= 20 s | <= 39 s |
+| 30 | Narrow Gauntlet | 3 / 4s | slider, 1 hunter (fast) | 6.7 s | 0 | <= 21 s | <= 41 s |
+| 31 | Fast and Slow | 3 / 4s | 2 hunters (fast/slow) | 8.1 s | 0 | <= 25 s | <= 49 s |
+| 32 | Spin Cycle | 3 / 4s | blade, 1 hunter (fast) | 6.5 s | 0 | <= 20 s | <= 39 s |
+| 33 | Two Hunters, One Door | fixed 5 | 1 switch/door, 2 hunters (fast), 1 pickup | 8.2 s | 1 | <= 25 s | <= 50 s |
+| 34 | Tight Rope | 3 / 4s | spikes, slider, 2 hunters (fast/slow) | 10.1 s | 0 | <= 31 s | <= 61 s |
+| 35 | The Listening Deep | fixed 5 | blade, 1 switch/door, 2 hunters (fast), 1 pickup | 15.3 s | 1 | <= 46 s | <= 92 s |
+
+### Echo 21 - Listening Post
+
+Stealth (ghost run) route: (70,589)@0s -> (163,495)@1.5s -> (285,426)@3s -> (295,274)@4.6s -> (295,122)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 6.4 s.
+
+### Echo 22 - Two Watchers
+
+Stealth (ghost run) route: (70,590)@0s -> (75,595)@1.5s -> (75,516)@3s -> (75,364)@4.6s -> (108,215)@6.1s -> (260,211)@7.6s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 3 s, then pulse every 1 s from t=9 s; hunters alerted 1x, finished in 9.4 s.
+
+### Echo 23 - Spiked Hall
+
+Stealth (ghost run) route: (70,589)@0s -> (163,495)@1.5s -> (296,436)@3s -> (324,284)@4.6s -> (295,132)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 8 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 14.4 s.
+
+### Echo 24 - Locked Crossing
+
+Stealth (ghost run) route: (70,590)@0s -> (75,595)@1.5s -> (75,595)@3s -> (75,568)@4.6s -> (184,495)@6.1s -> (285,404)@7.6s -> (285,252)@9.1s -> (295,102)@10.6s
+Pulses at: 0.4 s
+Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 10.8 s.
+
+### Echo 25 - Echoes and Eyes
+
+Stealth (ghost run) route: (70,591)@0s -> (65,615)@1.5s -> (65,579)@3s -> (65,427)@4.6s -> (83,276)@6.1s -> (236,255)@7.6s -> (295,112)@9.1s
+Pulses at: 0.6 s
+Loud solution: wait 0 s, then pulse every 1 s from t=9 s; hunters alerted 1x, finished in 9.4 s.
+
+### Echo 26 - Rhythm
+
+Stealth (ghost run) route: (70,590)@0s -> (133,495)@1.5s -> (283,456)@3s -> (295,304)@4.6s -> (285,152)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 6.7 s.
+
+### Echo 27 - Crossfire
+
+Stealth (ghost run) route: (70,589)@0s -> (75,437)@1.5s -> (75,286)@3s -> (166,195)@4.6s -> (285,142)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=5 s; hunters alerted 1x, finished in 6.6 s.
+
+### Echo 28 - Silent Descent
+
+Stealth (ghost run) route: (70,590)@0s -> (75,591)@1.5s -> (75,439)@3s -> (75,287)@4.6s -> (184,215)@6.1s -> (295,134)@7.6s
+Pulses at: 0.4 s
+Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 8.1 s.
+
+### Echo 29 - Fast Pursuit
+
+Stealth (ghost run) route: (50,589)@0s -> (183,535)@1.5s -> (265,426)@3s -> (275,274)@4.6s -> (275,122)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 6.4 s.
+
+### Echo 30 - Narrow Gauntlet
+
+Stealth (ghost run) route: (50,589)@0s -> (183,535)@1.5s -> (327,456)@3s -> (275,304)@4.6s -> (275,152)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 8 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 15.3 s.
+
+### Echo 31 - Fast and Slow
+
+Stealth (ghost run) route: (50,590)@0s -> (55,595)@1.5s -> (55,456)@3s -> (55,304)@4.6s -> (188,255)@6.1s -> (275,140)@7.6s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 8.1 s.
+
+### Echo 32 - Spin Cycle
+
+Stealth (ghost run) route: (50,589)@0s -> (183,535)@1.5s -> (265,436)@3s -> (265,284)@4.6s -> (265,132)@6.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 5 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 11.4 s.
+
+### Echo 33 - Two Hunters, One Door
+
+Stealth (ghost run) route: (50,589)@0s -> (45,444)@1.5s -> (45,445)@3s -> (45,307)@4.6s -> (184,255)@6.1s -> (275,144)@7.6s
+Pulses at: 1.9 s
+Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 8.2 s.
+
+### Echo 34 - Tight Rope
+
+Stealth (ghost run) route: (50,590)@0s -> (55,595)@1.5s -> (55,587)@3s -> (55,434)@4.6s -> (55,282)@6.1s -> (190,225)@7.6s -> (326,159)@9.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=9 s; hunters alerted 1x, finished in 10.1 s.
+
+### Echo 35 - The Listening Deep
+
+Stealth (ghost run) route: (50,590)@0s -> (55,595)@1.5s -> (55,612)@3s -> (55,615)@4.6s -> (55,615)@6.1s -> (55,615)@7.6s -> (98,534)@9.1s -> (248,532)@10.6s -> (265,382)@12.1s -> (268,232)@13.6s -> (303,94)@15.1s
+Pulses at: 3.5 s
+Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 8.6 s.
+

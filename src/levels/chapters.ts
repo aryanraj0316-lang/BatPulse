@@ -8,8 +8,11 @@ export interface Chapter {
   last: number;
 }
 
-/** Chapter grouping for Level Select. Chapters 2 and 3 are added with their levels in Phase 4. */
-export const CHAPTERS: readonly Chapter[] = [{ id: 1, name: 'The Dark Cavern', first: 1, last: 20 }];
+/** Chapter grouping for Level Select. Chapter 3 is added with its levels in Phase 4. */
+export const CHAPTERS: readonly Chapter[] = [
+  { id: 1, name: 'The Dark Cavern', first: 1, last: 20 },
+  { id: 2, name: 'The Listening Deep', first: 21, last: 35 },
+];
 
 export function chapterLevelIds(c: Chapter): number[] {
   return Array.from({ length: c.last - c.first + 1 }, (_, i) => c.first + i);

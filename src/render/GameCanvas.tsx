@@ -4,6 +4,7 @@ import { VisualKey } from '../assets/keys';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { FrameBus } from '../game/frameBus';
 import { GameSim } from '../sim/game';
+import { edgeAlpha } from '../game/jumpGate';
 import { GameView } from './GameView';
 
 interface Props {
@@ -50,6 +51,12 @@ export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, scre
         shakeY={shakeY}
       />
       {k > 0 && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#FF3B4E', opacity: 0.28 * k }]} />}
+      {sim.threat > 0 && (
+        <View
+          testID="threat-edge"
+          style={[StyleSheet.absoluteFill, { borderWidth: 10 + 22 * sim.threat, borderColor: '#FF1F3D', opacity: edgeAlpha(sim.threat, sim.beatAge) }]}
+        />
+      )}
     </View>
   );
 });
