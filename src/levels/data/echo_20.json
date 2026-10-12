@@ -148,10 +148,10 @@
     "rechargeSec": 0
   },
   "ghostPulseLimit": 4,
-  "parTime": 43,
+  "parTime": 39,
   "starThresholds": {
-    "two": 85,
-    "three": 43
+    "two": 78,
+    "three": 39
   },
   "escape": {
     "enabled": false,

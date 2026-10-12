@@ -32,6 +32,9 @@ export interface TimedRun {
   deaths: number;
   pulses: number;
   failedAt?: string;
+  /** Where the bat was about every 1.5 s, and when it pulsed (the documented solution). */
+  trace: { t: number; x: number; y: number }[];
+  pulseTimes: number[];
 }
 
 function doorBlocksAt(world: World, doorTimer: Float32Array, di: number, tPlan: number): boolean {
@@ -143,11 +146,24 @@ export function flyTimed(def: LevelDef, params: Partial<SimParams> = {}): TimedR
   const world = buildWorld(def, ECHO_CONFIG.world.wallSegmentLen);
   const sim = new GameSim(world, { pulseRadius: 150, ...params });
   let deaths = 0;
+  const trace: TimedRun['trace'] = [];
+  const pulseTimes: number[] = [];
+  let nextSample = 0;
   sim.onEvent = (e) => {
     if (e === 'death') deaths++;
+    if (e === 'pulse') pulseTimes.push(Math.round(sim.elapsed * 10) / 10);
+  };
+  // sample the bat's position as the run goes on, whoever steps the sim
+  const rawStep = sim.step.bind(sim);
+  sim.step = (dt: number) => {
+    rawStep(dt);
+    if (sim.elapsed >= nextSample) {
+      trace.push({ t: Math.round(sim.elapsed * 10) / 10, x: Math.round(sim.body.x), y: Math.round(sim.body.y) });
+      nextSample = sim.elapsed + 1.5;
+    }
   };
   const cols = Math.ceil(def.width / CELL);
-  const result = (finished: boolean, failedAt?: string): TimedRun => ({ finished, timeSec: sim.elapsed, deaths, pulses: sim.pulsesUsed, failedAt });
+  const result = (finished: boolean, failedAt?: string): TimedRun => ({ finished, timeSec: sim.elapsed, deaths, pulses: sim.pulsesUsed, failedAt, trace, pulseTimes });
 
   // 1. every switch in turn: go to a spot with a clear view of it, pulse
   const order = [...world.switches].sort((a, b) => a.id.localeCompare(b.id));

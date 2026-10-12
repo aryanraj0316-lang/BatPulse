@@ -20,6 +20,11 @@ describe('Chapter 1 (Echo 01-20): every level is completable by The Rookie', () 
       expect(r.finished).toBe(true);
       expect(r.deaths).toBe(0);
       expect(r.timeSec).toBeLessThanOrEqual(def.starThresholds.three);
+      // thresholds stay tied to the measured clean time (3 stars ~ 3x, 2 stars ~ 6x), so they cannot silently drift
+      expect(def.starThresholds.three / r.timeSec).toBeGreaterThanOrEqual(2.5);
+      expect(def.starThresholds.three / r.timeSec).toBeLessThanOrEqual(3.6);
+      expect(def.starThresholds.two / r.timeSec).toBeGreaterThanOrEqual(5);
+      expect(def.starThresholds.two / r.timeSec).toBeLessThanOrEqual(7.2);
       // fixed-sonar levels must leave pulses for the player to look around with, beyond the switch pulses
       if (def.sonar.mode === 'fixed') expect(def.sonar.charges - r.pulses).toBeGreaterThanOrEqual(2);
     } else {
@@ -27,6 +32,8 @@ describe('Chapter 1 (Echo 01-20): every level is completable by The Rookie', () 
       expect(r.finished).toBe(true);
       expect(r.deaths).toBe(0);
       expect(r.timeSec).toBeLessThanOrEqual(def.starThresholds.three);
+      expect(def.starThresholds.three / r.timeSec).toBeGreaterThanOrEqual(2.5);
+      expect(def.starThresholds.three / r.timeSec).toBeLessThanOrEqual(3.6);
     }
   });
 });
