@@ -1,342 +1,124 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { PALETTE } from '../constants/palette';
-import { ScoreBreakdown } from '../engine/ScoringSystem';
+import { formatTime } from './HUD';
 
-interface ResultCardProps {
+export interface ResultData {
+  stars: 1 | 2 | 3;
+  timeSec: number;
+  bestMomentum: number;
+  score: number;
+  shardsEarned: number;
+  isNewBestTime: boolean;
+  /** seconds needed for the next star, if not at 3 stars */
+  nextStarAt: number | null;
+}
+
+interface Props {
   visible: boolean;
   levelNumber: number;
   levelTitle: string;
-  score: ScoreBreakdown;
-  shardsEarned: number;
-  isGhostRun: boolean;
-  onNextLevel: () => void;
-  onInstantRetry: () => void;
-  onMenu: () => void;
+  result: ResultData;
+  /** false when there is no further level to go to */
+  hasNext: boolean;
+  onNext: () => void;
+  onRetry: () => void;
+  onHome: () => void;
 }
 
-export const ResultCard: React.FC<ResultCardProps> = ({
-  visible,
-  levelNumber,
-  levelTitle,
-  score,
-  shardsEarned,
-  isGhostRun,
-  onNextLevel,
-  onInstantRetry,
-  onMenu,
-}) => {
-  return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          {/* Header */}
-          <Text style={styles.headerTag}>✦ EXTRACTION SUCCESSFUL ✦</Text>
-          <Text style={styles.titleText}>ECHO {levelNumber.toString().padStart(2, '0')}</Text>
-          <Text style={styles.subtitleText}>{levelTitle.toUpperCase()}</Text>
+export const ResultCard: React.FC<Props> = ({ visible, levelNumber, levelTitle, result, hasNext, onNext, onRetry, onHome }) => (
+  <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <View style={styles.overlay}>
+      <View style={styles.card}>
+        <Text style={styles.headerTag}>✦ LEVEL COMPLETE ✦</Text>
+        <Text style={styles.titleText}>ECHO {levelNumber.toString().padStart(2, '0')}</Text>
+        <Text style={styles.subtitleText}>{levelTitle.toUpperCase()}</Text>
 
-          {/* 3-Star Rating */}
-          <View style={styles.starsRow}>
-            {[1, 2, 3].map((starIdx) => {
-              const earned = starIdx <= score.stars;
-              return (
-                <Text
-                  key={starIdx}
-                  style={[
-                    styles.starIcon,
-                    {
-                      color: earned ? PALETTE.shardGold : 'rgba(255,255,255,0.12)',
-                      textShadowColor: earned ? PALETTE.shardGold : 'transparent',
-                      textShadowRadius: 10,
-                    },
-                  ]}
-                >
-                  ★
-                </Text>
-              );
-            })}
-          </View>
+        <View style={styles.starsRow} testID="result-stars">
+          {[1, 2, 3].map((i) => (
+            <Text key={i} style={[styles.starIcon, { color: i <= result.stars ? PALETTE.shardGold : 'rgba(255,255,255,0.12)' }]}>
+              ★
+            </Text>
+          ))}
+        </View>
+        {result.nextStarAt !== null && (
+          <Text style={styles.hint}>{result.stars === 1 ? '★★' : '★★★'} under {Math.floor(result.nextStarAt)}s</Text>
+        )}
 
-          {/* Missing Star Replay Reason */}
-          {score.missingStarReason && (
-            <View style={styles.missingStarBox}>
-              <Text style={styles.missingStarText}>{score.missingStarReason}</Text>
-            </View>
-          )}
+        <View style={styles.grid}>
+          <Row label="TIME" value={`${formatTime(result.timeSec)}${result.isNewBestTime ? '  NEW BEST' : ''}`} testID="result-time" />
+          <Row label="BEST MOMENTUM" value={`×${result.bestMomentum.toFixed(1)}`} color={PALETTE.shardGold} testID="result-momentum" />
+          <Row label="SCORE" value={String(result.score)} />
+          <View style={styles.divider} />
+          <Row label="ECHO SHARDS" value={`+${result.shardsEarned} ✦`} color={PALETTE.shardGold} big testID="result-shards" />
+        </View>
 
-          {/* Ghost Run Badge */}
-          {isGhostRun && (
-            <View style={styles.ghostBadge}>
-              <Text style={styles.ghostBadgeText}>🦇 GHOST RUN · SILENT MASTERY</Text>
-            </View>
-          )}
-
-          {/* Score & Rewards Breakdown */}
-          <View style={styles.scoreGrid}>
-            <View style={styles.scoreRow}>
-              <Text style={styles.scoreLabel}>BASE SCORE</Text>
-              <Text style={styles.scoreValue}>{score.baseScore}</Text>
-            </View>
-
-            {score.momentumMultiplier > 1.0 && (
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreLabel}>MOMENTUM MULTIPLIER</Text>
-                <Text style={[styles.scoreValue, { color: PALETTE.shardGold }]}>
-                  ×{score.momentumMultiplier.toFixed(1)}
-                </Text>
-              </View>
-            )}
-
-            {score.perfectEchoBonus > 0 && (
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreLabel}>PERFECT ECHO BONUS</Text>
-                <Text style={[styles.scoreValue, { color: PALETTE.sonarCyan }]}>
-                  +{score.perfectEchoBonus}
-                </Text>
-              </View>
-            )}
-
-            {score.blindFinishBonus > 0 && (
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreLabel}>BLIND FINISH BONUS</Text>
-                <Text style={[styles.scoreValue, { color: PALETTE.goalViolet }]}>
-                  +{score.blindFinishBonus}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.divider} />
-
-            <View style={styles.scoreRow}>
-              <Text style={styles.totalLabel}>TOTAL SCORE</Text>
-              <Text style={styles.totalValue}>{score.totalScore}</Text>
-            </View>
-
-            <View style={styles.shardRewardRow}>
-              <Text style={styles.shardRewardLabel}>ECHO SHARDS EARNED</Text>
-              <Text style={styles.shardRewardValue}>+{shardsEarned} ✦</Text>
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.buttonStack}>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={onNextLevel}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryButtonText}>NEXT ECHO →</Text>
+        <View style={styles.buttons}>
+          {hasNext && (
+            <TouchableOpacity style={styles.primary} onPress={onNext} activeOpacity={0.8} testID="btn-next">
+              <Text style={styles.primaryText}>NEXT →</Text>
             </TouchableOpacity>
-
-            <View style={styles.secondaryRow}>
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={onInstantRetry}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.secondaryButtonText}>↺ RETRY CLEANER</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={onMenu}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.secondaryButtonText}>≡ MENU</Text>
-              </TouchableOpacity>
-            </View>
+          )}
+          <View style={styles.secondaryRow}>
+            <TouchableOpacity style={styles.secondary} onPress={onRetry} activeOpacity={0.7} testID="btn-retry">
+              <Text style={styles.secondaryText}>↺ RETRY</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondary} onPress={onHome} activeOpacity={0.7} testID="btn-home">
+              <Text style={styles.secondaryText}>⌂ HOME</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
-    </Modal>
-  );
-};
+    </View>
+  </Modal>
+);
+
+const Row: React.FC<{ label: string; value: string; color?: string; big?: boolean; testID?: string }> = ({ label, value, color, big, testID }) => (
+  <View style={styles.row}>
+    <Text style={[styles.rowLabel, big && styles.rowLabelBig]}>{label}</Text>
+    <Text style={[styles.rowValue, big && styles.rowValueBig, color ? { color } : null]} testID={testID}>
+      {value}
+    </Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(4, 6, 10, 0.92)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(4, 6, 10, 0.92)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   card: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#080D16',
-    borderRadius: 8,
+    backgroundColor: '#0A111C',
+    borderRadius: 12,
     padding: 22,
-    alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: PALETTE.sonarCyan,
-    shadowColor: PALETTE.sonarCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 18,
-  },
-  headerTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: PALETTE.goalViolet,
-    letterSpacing: 2,
-    marginBottom: 4,
-  },
-  titleText: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  subtitleText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    letterSpacing: 1.5,
-    marginTop: 2,
-    marginBottom: 14,
-  },
-  starsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14,
-  },
-  starIcon: {
-    fontSize: 34,
-  },
-  missingStarBox: {
-    backgroundColor: 'rgba(255, 201, 107, 0.08)',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 201, 107, 0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 12,
-    width: '100%',
+    borderColor: 'rgba(77, 240, 255, 0.35)',
     alignItems: 'center',
   },
-  missingStarText: {
-    fontSize: 10,
-    color: PALETTE.shardGold,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textAlign: 'center',
-  },
-  ghostBadge: {
-    backgroundColor: 'rgba(77, 240, 255, 0.08)',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: PALETTE.sonarCyan,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginBottom: 14,
-  },
-  ghostBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: PALETTE.sonarCyan,
-    letterSpacing: 1.2,
-  },
-  scoreGrid: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    gap: 6,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  scoreLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  scoreValue: {
-    fontSize: 12,
-    color: '#CBD5E1',
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginVertical: 4,
-  },
-  totalLabel: {
-    fontSize: 11,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  totalValue: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  shardRewardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  shardRewardLabel: {
-    fontSize: 10,
-    color: PALETTE.shardGold,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  shardRewardValue: {
-    fontSize: 13,
-    color: PALETTE.shardGold,
-    fontWeight: '900',
-  },
-  buttonStack: {
-    width: '100%',
-    gap: 8,
-  },
-  primaryButton: {
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 6,
-    alignItems: 'center',
-    backgroundColor: PALETTE.sonarCyan,
-    shadowColor: PALETTE.sonarCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-  },
-  primaryButtonText: {
-    color: '#04060A',
-    fontWeight: '900',
-    fontSize: 13,
-    letterSpacing: 2,
-  },
-  secondaryRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  secondaryButton: {
+  headerTag: { fontSize: 10, fontWeight: '800', color: PALETTE.sonarCyan, letterSpacing: 2.5 },
+  titleText: { fontSize: 26, fontWeight: '900', color: '#F8FAFC', letterSpacing: 3, marginTop: 6 },
+  subtitleText: { fontSize: 11, color: '#94A3B8', letterSpacing: 2, marginTop: 2 },
+  starsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  starIcon: { fontSize: 38 },
+  hint: { fontSize: 10, color: '#94A3B8', letterSpacing: 1, marginTop: 2 },
+  grid: { width: '100%', marginTop: 16, gap: 8 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  rowLabel: { fontSize: 10, color: '#64748B', fontWeight: '700', letterSpacing: 1.5 },
+  rowLabelBig: { color: '#CBD5E1' },
+  rowValue: { fontSize: 14, color: '#F8FAFC', fontWeight: '700', fontVariant: ['tabular-nums'] },
+  rowValueBig: { fontSize: 18, fontWeight: '900' },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 4 },
+  buttons: { width: '100%', marginTop: 18, gap: 10 },
+  primary: { backgroundColor: PALETTE.sonarCyan, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+  primaryText: { color: '#001018', fontWeight: '900', fontSize: 14, letterSpacing: 2 },
+  secondaryRow: { flexDirection: 'row', gap: 10 },
+  secondary: {
     flex: 1,
+    borderRadius: 8,
     paddingVertical: 12,
-    borderRadius: 6,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  secondaryButtonText: {
-    color: '#CBD5E1',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 1.2,
-  },
+  secondaryText: { color: '#E2E8F0', fontWeight: '700', fontSize: 12, letterSpacing: 1.5 },
 });

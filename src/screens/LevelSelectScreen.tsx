@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { PALETTE } from '../constants/palette';
 import { useProgressStore } from '../state/progressStore';
-import { LEVEL_PRESETS } from '../levels/params';
+import { authoredLevelIds, loadAuthoredLevel } from '../levels/loader';
+import { emptyRecord } from '../state/progress';
 
 interface LevelSelectScreenProps {
   onSelectLevel: (levelId: number) => void;
@@ -11,6 +12,11 @@ interface LevelSelectScreenProps {
 
 export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLevel, onBack }) => {
   const { records, shards } = useProgressStore();
+  const levels = authoredLevelIds()
+    .filter((id) => id > 0)
+    .sort((a, b) => a - b)
+    .map((id) => loadAuthoredLevel(id))
+    .filter((l): l is NonNullable<typeof l> => l !== null);
 
   return (
     <View style={styles.container}>
@@ -30,17 +36,8 @@ export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLe
 
       {/* Levels Scroll List */}
       <ScrollView contentContainerStyle={styles.scrollList} showsVerticalScrollIndicator={false}>
-        {LEVEL_PRESETS.map((preset) => {
-          const record = records[preset.id] || {
-            levelId: preset.id,
-            unlocked: preset.id === 1,
-            completed: false,
-            stars: 0,
-            bestTime: null,
-            bestSonarUsed: null,
-            ghostRun: false,
-            perfectEcho: false,
-          };
+        {levels.map((preset) => {
+          const record = records[preset.id] || emptyRecord(preset.id, preset.id === 1);
 
           const isUnlocked = record.unlocked;
 
@@ -73,9 +70,6 @@ export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLe
                   >
                     ECHO {preset.id.toString().padStart(2, '0')}
                   </Text>
-                  {preset.hunterCount > 0 && (
-                    <Text style={styles.hunterTag}>⚠ {preset.hunterCount} WRAITH</Text>
-                  )}
                   {record.ghostRun && (
                     <Text style={styles.ghostTag}>🦇 GHOST</Text>
                   )}
@@ -107,21 +101,15 @@ export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLe
               </View>
 
               <Text style={styles.cardTitle}>{preset.name.toUpperCase()}</Text>
-              <Text style={styles.cardSubtitle}>{preset.subtitle}</Text>
-
-              {preset.hint && (
-                <Text style={styles.hintText}>{preset.hint}</Text>
-              )}
+              <Text style={styles.cardSubtitle}>CHAPTER {preset.chapter}</Text>
 
               {/* Best Record Footer */}
               {isUnlocked && record.completed && (
                 <View style={styles.cardFooter}>
                   <Text style={styles.recordStat}>
-                    ⚡ Best: {Math.floor(record.bestTime || 0)}s (Par {preset.parTime}s)
+                    ⚡ Best: {(record.bestTime ?? 0).toFixed(1)}s (Par {preset.parTime}s)
                   </Text>
-                  <Text style={styles.recordStat}>
-                    📡 Sonar: {record.bestSonarUsed} / {preset.sonarAllowance}
-                  </Text>
+                  <Text style={styles.recordStat}>🔥 Momentum ×{(record.bestMomentum ?? 1).toFixed(1)}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -206,16 +194,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 1.5,
   },
-  hunterTag: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: PALETTE.wraithRed,
-    backgroundColor: 'rgba(255, 59, 78, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 3,
-    letterSpacing: 0.8,
-  },
   ghostTag: {
     fontSize: 8,
     fontWeight: '800',
@@ -251,12 +229,6 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     marginTop: 2,
     letterSpacing: 0.5,
-  },
-  hintText: {
-    fontSize: 10,
-    color: '#64748B',
-    fontStyle: 'italic',
-    marginTop: 6,
   },
   cardFooter: {
     flexDirection: 'row',

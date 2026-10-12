@@ -26,5 +26,5 @@
   "parTime": 25,
   "starThresholds": { "two": 40, "three": 25 },
   "escape": { "enabled": false, "wallSpeed": 0 },
-  "hint": "Phase 0 data-file test level."
+  "hints": [{ "text": "Data-file test level", "until": "seconds", "seconds": 3 }]
 }

@@ -1,12 +1,13 @@
-import { AbilityId, LevelRecord } from '../types/game';
+import { LevelRecord } from '../types/game';
 
 export const SAVE_VERSION = 2;
 
 export interface SettingsSave {
-  soundEnabled: boolean;
+  sfxVolume: number; // 0..1
+  musicVolume: number; // 0..1
+  brightness: number; // 0.5..1.5, multiplies reveal glow
   hapticsEnabled: boolean;
   floatingJoystick: boolean;
-  devModeUnlocked: boolean;
 }
 
 export interface SaveData {
@@ -16,11 +17,6 @@ export interface SaveData {
   unlockedCharacters: string[];
   /** Per-level progress, keyed by level id. */
   records: Record<number, LevelRecord>;
-  // Legacy ability system; replaced by characters in Phase 5.
-  equippedAbilities: AbilityId[];
-  unlockedAbilities: AbilityId[];
-  endlessHighScore: number;
-  dailyBestDepth: number;
   hasSeenHeadphonePrompt: boolean;
   settings: SettingsSave;
   daily: { lastClaimDay: number | null; streak: number };
@@ -32,14 +28,10 @@ export const defaultSave = (): SaveData => ({
   selectedCharacter: 'bat_rookie',
   unlockedCharacters: ['bat_rookie'],
   records: {
-    1: { levelId: 1, unlocked: true, completed: false, stars: 0, bestTime: null, bestSonarUsed: null, ghostRun: false, perfectEcho: false },
+    1: { levelId: 1, unlocked: true, completed: false, stars: 0, bestTime: null, bestMomentum: null, ghostRun: false },
   },
-  equippedAbilities: [],
-  unlockedAbilities: [],
-  endlessHighScore: 0,
-  dailyBestDepth: 0,
   hasSeenHeadphonePrompt: false,
-  settings: { soundEnabled: true, hapticsEnabled: true, floatingJoystick: true, devModeUnlocked: false },
+  settings: { sfxVolume: 0.8, musicVolume: 0.5, brightness: 1, hapticsEnabled: true, floatingJoystick: true },
   daily: { lastClaimDay: null, streak: 0 },
 });
 
@@ -47,6 +39,8 @@ const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'obj
 const nonNegInt = (v: unknown, fb: number) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fb);
 const bool = (v: unknown, fb: boolean) => (typeof v === 'boolean' ? v : fb);
 const strArr = (v: unknown, fb: string[]) => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : fb);
+const clamp01 = (v: unknown, fb: number, lo = 0, hi = 1) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fb;
 const finiteOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 function normalizeRecords(v: unknown, fb: SaveData['records']): SaveData['records'] {
@@ -61,10 +55,8 @@ function normalizeRecords(v: unknown, fb: SaveData['records']): SaveData['record
       completed: bool(r.completed, false),
       stars: Math.min(3, nonNegInt(r.stars, 0)),
       bestTime: finiteOrNull(r.bestTime),
-      bestSonarUsed: finiteOrNull(r.bestSonarUsed),
+      bestMomentum: finiteOrNull(r.bestMomentum),
       ghostRun: bool(r.ghostRun, false),
-      perfectEcho: bool(r.perfectEcho, false),
-      ghostTrack: Array.isArray(r.ghostTrack) ? r.ghostTrack : undefined,
     };
   }
   return Object.keys(out).length > 0 ? out : fb;
@@ -92,16 +84,14 @@ export function migrateSave(raw: unknown): SaveData {
     selectedCharacter: selected,
     unlockedCharacters,
     records: normalizeRecords(raw.records, d.records),
-    equippedAbilities: strArr(raw.equippedAbilities, []) as AbilityId[],
-    unlockedAbilities: strArr(raw.unlockedAbilities, []) as AbilityId[],
-    endlessHighScore: nonNegInt(raw.endlessHighScore, 0),
-    dailyBestDepth: nonNegInt(raw.dailyBestDepth, 0),
     hasSeenHeadphonePrompt: bool(raw.hasSeenHeadphonePrompt, false),
     settings: {
-      soundEnabled: bool(settings.soundEnabled, d.settings.soundEnabled),
+      // legacy builds stored a single on/off switch: off maps to zero volume
+      sfxVolume: clamp01(settings.sfxVolume, settings.soundEnabled === false ? 0 : d.settings.sfxVolume),
+      musicVolume: clamp01(settings.musicVolume, settings.soundEnabled === false ? 0 : d.settings.musicVolume),
+      brightness: clamp01(settings.brightness, d.settings.brightness, 0.5, 1.5),
       hapticsEnabled: bool(settings.hapticsEnabled, d.settings.hapticsEnabled),
       floatingJoystick: bool(settings.floatingJoystick, d.settings.floatingJoystick),
-      devModeUnlocked: bool(settings.devModeUnlocked, d.settings.devModeUnlocked),
     },
     daily: {
       lastClaimDay: typeof daily.lastClaimDay === 'number' ? daily.lastClaimDay : null,

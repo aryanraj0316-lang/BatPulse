@@ -1,54 +1,5 @@
-export const GAME_CONFIG = {
-  // Sonar wave & raycast constants
-  SONAR_RADIUS: 290,
-  SONAR_EXPAND_DURATION: 0.32, // fast punchy expansion
-  SONAR_RAY_COUNT: 144, // radial rays
-  SONAR_COOLDOWN: 280, // ms between pulses
-  DISTANCE_DECAY_FACTOR: 0.85, // falloff at edge of sonar wave
-
-  // Snappy instant Reveal decay timings (ms) — quick flash that fades immediately
-  REVEAL_FULL_DURATION: 220, // FRESH tier (bright flash)
-  REVEAL_FADE_DURATION: 260, // FADING tier (quick decay)
-  REVEAL_ECHO_DURATION: 320, // ECHO tier (final fadeout)
-  ECHO_JITTER_AMPLITUDE: 2.0, // ±px memory uncertainty jitter
-
-  // Player physics
-  PLAYER_RADIUS: 14,
-  PLAYER_SPEED: 185, // pixels per second
-  PLAYER_ACCEL: 16.0, // lerp factor
-  PLAYER_FRICTION: 12.0,
-  MOVEMENT_NOISE_THRESHOLD: 0.7, // >70% joystick magnitude emits footstep echo
-  MOVEMENT_NOISE_FACTOR: 0.15, // 15% of sonar audibility
-
-  // Hunter (The Wraith)
-  HUNTER_RADIUS: 18,
-  HUNTER_SPEED_RATIO: 0.82, // 0.82x player speed
-  HUNTER_HEARING_RADIUS: 380, // Hearing distance for pings
-  HUNTER_FOOTSTEP_HEARING_RADIUS: 140, // Hearing distance for sprint footsteps
-  HUNTER_SEARCH_TIME: 4500, // ms of spiral search before returning to patrol
-  HUNTER_FRENZY_MULT: 1.15, // 1.15x player speed in frenzy
-  HUNTER_FRENZY_DURATION: 3000, // ms frenzy lasts
-
-  // Momentum & Scoring
-  MOMENTUM_TICK: 500, // ms of movement for +1 momentum
-  MOMENTUM_CAP: 20,
-  PERFECT_ECHO_BONUS: 250, // bonus per pulse left
-  GHOST_RUN_BONUS: 1000, // cleared without alert
-  BLIND_FINISH_BONUS_MULT: 1.5,
-
-  // Particles, Dust, Effects
-  PARTICLE_POOL_SIZE: 36,
-  DUST_COUNT: 18,
-  GRAIN_OPACITY: 0.04,
-  TARGET_FPS: 60,
-
-  // Responsive arena world size
-  WORLD_WIDTH: 380,
-  WORLD_HEIGHT: 660,
-};
-
 /**
- * Spec-driven tunables (Echo Location rebuild). Everything gameplay-related that a designer
+ * All gameplay tunables. Everything gameplay-related that a designer
  * might tweak lives here; systems read these values and never hard-code numbers.
  * Times are in seconds unless the key says Ms.
  */
@@ -59,7 +10,10 @@ export const ECHO_CONFIG = {
     tutorialRechargeSec: 2, // Echo 01-05
     tutorialLevelMax: 5,
     maxRadiusScreenFraction: 0.4, // of screen width
-    edgeFalloff: 0.35, // 0..1 – share of the radius over which the wave fades out
+    edgeFalloff: 0.35, // 0..1: share of the radius over which the wave fades out
+    glowHoldFraction: 0.4, // share of the glow time spent at full brightness before fading
+    maxWaves: 8, // size of the pooled wave array
+    waveLingerSec: 0.25, // how long the ring stays drawable after reaching full size
     revealGlowSec: 1.5,
     expandSec: 0.32,
     minTapGapMs: 120, // debounce for very fast taps
@@ -69,7 +23,7 @@ export const ECHO_CONFIG = {
     speed: 185, // px / s
     acceleration: 16,
     deceleration: 12,
-    turnRate: 0.25, // fraction of remaining angle closed per frame
+    turnSpeed: 12, // heading smoothing rate (1/s); higher = snappier turns
     joystickDeadZone: 0.1,
     joystickRadius: 50,
     radius: 14,
@@ -80,7 +34,9 @@ export const ECHO_CONFIG = {
     intervalSec: 2,
     max: 2.0,
     idleResetSec: 1.5,
-    resetOnWallHit: true,
+    hitSpeedThreshold: 40, // px/s into a wall that counts as a hit (grazing slides do not)
+    hitCooldownSec: 0.25, // minimum gap between wall-hit events
+    movingSpeed: 25, // px/s above which the bat counts as moving
   },
   death: {
     shakeSec: 0.3,
@@ -89,7 +45,6 @@ export const ECHO_CONFIG = {
   rewards: {
     starShards: { 1: 20, 2: 35, 3: 50 } as Record<number, number>,
     ghostRunBonus: 25,
-    momentumBonusPerStep: 2, // shards per 0.1 of momentum above x1.0 at finish
     replayFactor: 0.25, // replays pay this share of a first clear
     dailyLoginMin: 50,
     dailyLoginMax: 100,
@@ -113,6 +68,21 @@ export const ECHO_CONFIG = {
   hazards: {
     sliderLoopSecMin: 2,
     sliderLoopSecMax: 4,
+    spikeForgiveness: 2, // px the spike hitbox is shrunk by, so touching a tip is not instant death
+  },
+  surfaces: {
+    normal: { brightMult: 1, secMult: 1 } as { brightMult: number; secMult: number; fixedSec?: number },
+    crystal: { brightMult: 2, secMult: 2 } as { brightMult: number; secMult: number; fixedSec?: number },
+    mossy: { brightMult: 0.6, secMult: 0.2, fixedSec: 0.3 } as { brightMult: number; secMult: number; fixedSec?: number },
+  },
+  world: {
+    wallSegmentLen: 60, // long walls are revealed in pieces of at most this length
+    edgeThickness: 8, // glowing outline thickness of thick solid blocks
+    maxDt: 0.05, // longest simulated step (s); longer frames are clamped
+  },
+  score: {
+    base: 500,
+    timeBonusPerSec: 50, // per second under 2x par time
   },
   characters: {
     bat_rookie: { name: 'The Rookie', price: 0, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },

@@ -1,56 +1,43 @@
-import React from 'react';
+import React, { useEffect, useReducer } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Rect } from 'react-native-svg';
-import { EnvObject, PlayerEntity, Rect as WallRect, WraithEntity } from '../types/game';
-import { GAME_CONFIG } from '../constants/gameConfig';
+import Svg, { Circle, G, Rect } from 'react-native-svg';
+import { FrameBus } from '../game/frameBus';
+import { GameSim } from '../sim/game';
 import { DEBUG_ENABLED, useDebugFlags } from './debugFlags';
 
 interface Props {
-  width: number;
-  height: number;
-  player: PlayerEntity;
-  walls: WallRect[];
-  objects: EnvObject[];
-  wraiths: WraithEntity[];
+  sim: GameSim;
+  bus: FrameBus;
+  screenW: number;
+  screenH: number;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
   fps: number;
 }
 
-/** Hitboxes, enemy hearing radius and FPS counter. Renders nothing in release builds. */
-export const DebugOverlay: React.FC<Props> = ({ width, height, player, walls, objects, wraiths, fps }) => {
+/** Hitboxes and FPS counter (dev builds only). Enemy hearing radius is drawn once enemies exist (Phase 3). */
+export const DebugOverlay: React.FC<Props> = ({ sim, bus, screenW, screenH, scale, offsetX, offsetY, fps }) => {
   const flags = useDebugFlags();
+  const [, redraw] = useReducer((n: number) => (n + 1) | 0, 0);
+  useEffect(() => (DEBUG_ENABLED && flags.showHitboxes ? bus.subscribe(redraw) : undefined), [bus, flags.showHitboxes]);
   if (!DEBUG_ENABLED) return null;
 
+  const b = sim.body;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {(flags.showHitboxes || flags.showHearing) && (
-        <Svg width={width} height={height}>
-          {flags.showHitboxes && (
-            <>
-              {walls.map((w) => (
-                <Rect key={w.id} x={w.x} y={w.y} width={w.width} height={w.height} stroke="#00FF66" strokeWidth={1} fill="none" />
-              ))}
-              {objects.map((o) => (
-                <Rect key={o.id} x={o.x} y={o.y} width={o.width} height={o.height} stroke="#FFFF00" strokeWidth={1} fill="none" />
-              ))}
-              <Circle cx={player.pos.x} cy={player.pos.y} r={player.radius} stroke="#00FF66" strokeWidth={1} fill="none" />
-              {wraiths.map((w) => (
-                <Circle key={`hb${w.id}`} cx={w.pos.x} cy={w.pos.y} r={w.radius} stroke="#FF3B4E" strokeWidth={1} fill="none" />
-              ))}
-            </>
-          )}
-          {flags.showHearing &&
-            wraiths.map((w) => (
-              <Circle
-                key={`hr${w.id}`}
-                cx={w.pos.x}
-                cy={w.pos.y}
-                r={GAME_CONFIG.HUNTER_HEARING_RADIUS}
-                stroke="#FF3B4E"
-                strokeWidth={1}
-                strokeDasharray="6 6"
-                fill="rgba(255,59,78,0.05)"
-              />
+      {flags.showHitboxes && (
+        <Svg width={screenW} height={screenH}>
+          <G transform={`translate(${offsetX} ${offsetY}) scale(${scale})`}>
+            {sim.world.solids.map((w, i) => (
+              <Rect key={`s${i}`} x={w.x} y={w.y} width={w.width} height={w.height} stroke="#00FF66" strokeWidth={1} fill="none" />
             ))}
+            {sim.world.spikes.map((w, i) => (
+              <Rect key={`k${i}`} x={w.x} y={w.y} width={w.width} height={w.height} stroke="#FFFF00" strokeWidth={1} fill="none" />
+            ))}
+            <Circle cx={sim.world.finish.x} cy={sim.world.finish.y} r={sim.world.finish.radius} stroke="#B47DFF" strokeWidth={1} fill="none" />
+            <Circle cx={b.x} cy={b.y} r={b.r} stroke="#00FF66" strokeWidth={1} fill="none" />
+          </G>
         </Svg>
       )}
       {flags.showFps && (
@@ -66,7 +53,7 @@ const styles = StyleSheet.create({
   fps: {
     position: 'absolute',
     right: 8,
-    top: 90,
+    top: 130,
     color: '#00FF66',
     fontSize: 12,
     fontFamily: 'monospace',

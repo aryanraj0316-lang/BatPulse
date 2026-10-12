@@ -1,0 +1,109 @@
+{
+  "id": 4,
+  "name": "The Narrow Dark",
+  "chapter": 1,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 70,
+    "y": 590
+  },
+  "finish": {
+    "x": 70,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 140,
+      "width": 240,
+      "height": 40,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 300,
+      "width": 240,
+      "height": 40,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 460,
+      "width": 240,
+      "height": 40,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 340,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [
+    {
+      "x": 160,
+      "y": 220,
+      "width": 60,
+      "height": 20
+    },
+    {
+      "x": 160,
+      "y": 380,
+      "width": 60,
+      "height": 20
+    },
+    {
+      "x": 160,
+      "y": 560,
+      "width": 60,
+      "height": 20
+    }
+  ],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 2
+  },
+  "ghostPulseLimit": 5,
+  "parTime": 18,
+  "starThresholds": {
+    "two": 38,
+    "three": 18
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  },
+  "hints": []
+}

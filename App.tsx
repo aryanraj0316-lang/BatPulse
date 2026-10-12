@@ -1,38 +1,52 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { GameScreenState } from './src/types/game';
 import { PALETTE } from './src/constants/palette';
 import { useProgressStore } from './src/state/progressStore';
+import { useSettingsStore } from './src/state/settingsStore';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { LevelSelectScreen } from './src/screens/LevelSelectScreen';
-import { AbilitiesScreen } from './src/screens/AbilitiesScreen';
-import { EndlessScreen } from './src/screens/EndlessScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { SplashScreen } from './src/screens/SplashScreen';
 import { HeadphonePrompt } from './src/components/HeadphonePrompt';
 import { saveManager } from './src/save';
-import { useSettingsStore } from './src/state/settingsStore';
 import { registerPlaceholderAssets } from './src/assets/placeholders/visuals';
+import { audio, initAudio } from './src/audio';
+import { authoredLevelIds } from './src/levels/loader';
 
 // All art/audio is resolved through AssetRegistry keys; placeholders are registered once here.
 registerPlaceholderAssets();
 
+/** Splash goes straight into Echo 01; a returning player resumes at their furthest unlocked level. */
+function firstLevelToPlay(): number {
+  const playable = authoredLevelIds().filter((id) => id > 0);
+  const unlocked = Object.values(useProgressStore.getState().records).filter((r) => r.unlocked && playable.includes(r.levelId));
+  return unlocked.length > 0 ? Math.max(...unlocked.map((r) => r.levelId)) : 1;
+}
+
 export default function App() {
-  const [screen, setScreen] = useState<GameScreenState>('HOME');
+  const [screen, setScreen] = useState<GameScreenState>('SPLASH');
   const [selectedLevelId, setSelectedLevelId] = useState(1);
   const [ready, setReady] = useState(false);
 
-  // Load the save (primary -> backup -> default) before any screen reads progress.
+  const hasSeenHeadphonePrompt = useProgressStore((s) => s.hasSeenHeadphonePrompt);
+  const setHeadphonePromptSeen = useProgressStore((s) => s.setHeadphonePromptSeen);
+
+  // Load the save (primary -> backup -> default) and the sounds before any screen needs them.
   useEffect(() => {
     let cancelled = false;
     saveManager
       .load()
       .catch((e) => console.warn('save load failed, continuing with defaults', e))
-      .finally(() => {
+      .then(() => {
         useProgressStore.getState().hydrate();
         useSettingsStore.getState().hydrate();
+        return initAudio().catch((e) => console.warn('audio init failed, continuing silent', e));
+      })
+      .finally(() => {
         if (!cancelled) setReady(true);
       });
     return () => {
@@ -48,24 +62,13 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const { hasSeenHeadphonePrompt, setHeadphonePromptSeen } = useProgressStore();
-
-  const handleStartGame = (levelId: number) => {
+  const startGame = useCallback((levelId: number) => {
     setSelectedLevelId(levelId);
     setScreen('GAME');
-  };
+  }, []);
 
-  const handleStartEndless = () => {
-    // Endless mode starts at level 9 (procedural scaling floors)
-    setSelectedLevelId(9);
-    setScreen('GAME');
-  };
-
-  const handleStartDaily = () => {
-    const todaySeed = Math.floor(Date.now() / 86400000);
-    setSelectedLevelId(10);
-    setScreen('GAME');
-  };
+  const afterSplash = useCallback(() => startGame(firstLevelToPlay()), [startGame]);
+  const goHome = useCallback(() => setScreen('HOME'), []);
 
   if (!ready) {
     return <View style={styles.rootContainer} />;
@@ -73,57 +76,34 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.rootContainer} edges={['top', 'left', 'right']}>
+      {/* The game screen handles its own safe-area insets so touch and drawing share one coordinate space. */}
+      <SafeAreaView style={styles.rootContainer} edges={screen === 'GAME' ? [] : ['top', 'left', 'right']}>
         <StatusBar style="light" hidden={screen === 'GAME'} />
 
+        {/* the splash clock starts only after the first-launch prompt is dismissed */}
+        {screen === 'SPLASH' && hasSeenHeadphonePrompt && <SplashScreen onDone={afterSplash} />}
+
         {screen === 'HOME' && (
-          <HomeScreen
-            onPlay={handleStartGame}
-            onLevelSelect={() => setScreen('LEVEL_SELECT')}
-            onAbilities={() => setScreen('ABILITIES')}
-            onEndless={() => setScreen('ENDLESS')}
-            onSettings={() => setScreen('SETTINGS')}
-          />
+          <HomeScreen onPlay={startGame} onLevelSelect={() => setScreen('LEVEL_SELECT')} onSettings={() => setScreen('SETTINGS')} />
         )}
 
-        {screen === 'LEVEL_SELECT' && (
-          <LevelSelectScreen
-            onSelectLevel={handleStartGame}
-            onBack={() => setScreen('HOME')}
-          />
-        )}
+        {screen === 'LEVEL_SELECT' && <LevelSelectScreen onSelectLevel={startGame} onBack={goHome} />}
 
-        {screen === 'ABILITIES' && (
-          <AbilitiesScreen onBack={() => setScreen('HOME')} />
-        )}
-
-        {screen === 'ENDLESS' && (
-          <EndlessScreen
-            onStartEndless={handleStartEndless}
-            onStartDaily={handleStartDaily}
-            onBack={() => setScreen('HOME')}
-          />
-        )}
-
-        {screen === 'SETTINGS' && (
-          <SettingsScreen onBack={() => setScreen('HOME')} />
-        )}
+        {screen === 'SETTINGS' && <SettingsScreen onBack={goHome} />}
 
         {screen === 'GAME' && (
           <GameScreen
             levelId={selectedLevelId}
-            onExitToMenu={() => setScreen('HOME')}
+            onExitToMenu={() => {
+              audio.stopAll();
+              goHome();
+            }}
             onNextLevel={(nextId) => setSelectedLevelId(nextId)}
           />
         )}
 
-        {/* First Launch Headphone Prompt */}
-        {!hasSeenHeadphonePrompt && (
-          <HeadphonePrompt
-            visible={!hasSeenHeadphonePrompt}
-            onProceed={setHeadphonePromptSeen}
-          />
-        )}
+        {/* First launch headphone prompt (above everything, including the splash) */}
+        {!hasSeenHeadphonePrompt && <HeadphonePrompt visible onProceed={setHeadphonePromptSeen} />}
       </SafeAreaView>
     </SafeAreaProvider>
   );

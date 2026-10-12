@@ -6,9 +6,8 @@ import {
   authoredLevelIds,
   __setRawLevelForTest,
 } from '../levels/loader';
-import { toRuntimeLevel } from '../levels/adapter';
-import { LevelFactory } from '../levels/generated';
-import { ECHO_CONFIG, GAME_CONFIG } from '../constants/gameConfig';
+import { buildWorld } from '../sim/world';
+import { ECHO_CONFIG } from '../constants/gameConfig';
 import { LevelDef } from '../levels/schema';
 
 const clone = (): any => JSON.parse(JSON.stringify(testLevelJson));
@@ -113,49 +112,71 @@ describe('level loader', () => {
 
   it('loads well inside the 1 s level-load budget', () => {
     const t0 = Date.now();
-    for (let i = 0; i < 50; i++) LevelFactory.createLevel(0, undefined, 390, 800);
+    for (let i = 0; i < 50; i++) buildWorld(loadAuthoredLevel(5, true)!, ECHO_CONFIG.world.wallSegmentLen);
     expect((Date.now() - t0) / 50).toBeLessThan(ECHO_CONFIG.level.loadBudgetMs);
   });
 });
 
-describe('data file -> runtime level', () => {
-  it('LevelFactory serves the authored level instead of generating one', () => {
-    const rt = LevelFactory.createLevel(0, undefined, 380, 660);
-    expect(rt.name).toBe('Test Chamber');
-    expect(rt.walls).toHaveLength((testLevelJson as any).walls.length);
-    expect(rt.spawn).toEqual({ x: 190, y: 560 });
-  });
-
-  it('scales coordinates to the screen', () => {
-    const rt = toRuntimeLevel(testLevelJson as unknown as LevelDef, 760, 1320);
-    expect(rt.spawn).toEqual({ x: 380, y: 1120 });
-    expect(rt.goal.x).toBe(640);
-    expect(rt.walls[0].width).toBe(760);
-  });
-
-  it('editing level data changes the result (fixed sonar charges)', () => {
-    const def = clone() as LevelDef;
-    expect(toRuntimeLevel(def, 380, 660).sonar.allowance).toBe(999);
-    def.sonar = { mode: 'fixed', charges: 4, rechargeSec: 0 };
-    expect(toRuntimeLevel(def, 380, 660).sonar.allowance).toBe(4);
-  });
-
-  it('changing a config value changes behaviour', () => {
-    const def = clone() as LevelDef;
-    def.enemies = [{ type: 'hunter', waypoints: [{ x: 100, y: 100 }], speed: 'slow' }];
-    const before = toRuntimeLevel(def, 380, 660).hunters[0].speedMultiplier;
-    const oldMult = ECHO_CONFIG.enemy.slowHunterSpeedMult;
-    const oldRadius = GAME_CONFIG.SONAR_RADIUS;
-    try {
-      ECHO_CONFIG.enemy.slowHunterSpeedMult = 0.5;
-      GAME_CONFIG.SONAR_RADIUS = 111;
-      const after = toRuntimeLevel(def, 380, 660);
-      expect(before).toBe(oldMult);
-      expect(after.hunters[0].speedMultiplier).toBe(0.5);
-      expect(after.sonar.radius).toBe(111);
-    } finally {
-      ECHO_CONFIG.enemy.slowHunterSpeedMult = oldMult;
-      GAME_CONFIG.SONAR_RADIUS = oldRadius;
+describe('data file -> world', () => {
+  it('long walls are split so a pulse only lights the part it reaches', () => {
+    const def = loadAuthoredLevel(1, true) as LevelDef;
+    const world = buildWorld(def, ECHO_CONFIG.world.wallSegmentLen);
+    expect(world.solids).toHaveLength(def.walls.length); // collision uses the original boxes
+    expect(world.revealables.length).toBeGreaterThan(def.walls.length);
+    for (const r of world.revealables) {
+      if (r.kind === 'wall') expect(Math.max(r.width, r.height)).toBeLessThanOrEqual(ECHO_CONFIG.world.wallSegmentLen + 1e-6);
     }
+    // every wall's outline is covered by pieces (sample points along each perimeter)
+    const walls = world.revealables.filter((r) => r.kind === 'wall');
+    const covered = (x: number, y: number) => walls.some((r) => x >= r.x - 1e-6 && x <= r.x + r.width + 1e-6 && y >= r.y - 1e-6 && y <= r.y + r.height + 1e-6);
+    for (const w of def.walls) {
+      for (let t = 0; t <= 1; t += 0.05) {
+        expect(covered(w.x + w.width * t, w.y + 1)).toBe(true);
+        expect(covered(w.x + w.width * t, w.y + w.height - 1)).toBe(true);
+        expect(covered(w.x + 1, w.y + w.height * t)).toBe(true);
+        expect(covered(w.x + w.width - 1, w.y + w.height * t)).toBe(true);
+      }
+    }
+  });
+  it('spikes and the finish ring are revealable too', () => {
+    const def = loadAuthoredLevel(3, true) as LevelDef;
+    const world = buildWorld(def, 60);
+    expect(world.spikes.length).toBeGreaterThan(0);
+    expect(world.revealables.some((r) => r.kind === 'spike')).toBe(true);
+    expect(world.revealables.filter((r) => r.kind === 'finish')).toHaveLength(1);
+  });
+  it('editing level data changes the sonar behaviour (fixed vs recharge)', () => {
+    const { SonarEnergy } = require('../sim/sonarEnergy');
+    const def = clone() as LevelDef;
+    const e1 = new SonarEnergy(def.sonar);
+    def.sonar = { mode: 'fixed', charges: 4, rechargeSec: 0 };
+    const e2 = new SonarEnergy(def.sonar);
+    e1.tryUse();
+    e2.tryUse();
+    e1.update(2);
+    e2.update(2);
+    expect(e1.charges).toBe(3); // recharged (2 s per charge in the data file)
+    expect(e2.charges).toBe(3); // 4 - 1, never recharges
+    expect(e2.max).toBe(4);
+  });
+  it('changing a config value changes behaviour', () => {
+    const { pulseRadiusWorld } = require('../sim/world');
+    const old = ECHO_CONFIG.sonar.maxRadiusScreenFraction;
+    try {
+      const before = pulseRadiusWorld(400, 1, ECHO_CONFIG.sonar.maxRadiusScreenFraction);
+      ECHO_CONFIG.sonar.maxRadiusScreenFraction = 0.2;
+      expect(pulseRadiusWorld(400, 1, ECHO_CONFIG.sonar.maxRadiusScreenFraction)).toBe(before / 2);
+    } finally {
+      ECHO_CONFIG.sonar.maxRadiusScreenFraction = old;
+    }
+  });
+});
+
+describe('level data matches its ASCII sources', () => {
+  it('npm run levels is up to date (no stale JSON)', () => {
+    const { spawnSync } = require('child_process');
+    const r = spawnSync(process.execPath, ['tools/buildLevels.js', '--check'], { cwd: process.cwd(), encoding: 'utf8' });
+    expect(r.stderr + r.stdout).toBe('');
+    expect(r.status).toBe(0);
   });
 });

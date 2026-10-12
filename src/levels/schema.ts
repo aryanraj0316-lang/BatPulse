@@ -72,5 +72,14 @@ export interface LevelDef {
   /** Seconds. three <= two: finishing at or under `two` gives 2 stars, at or under `three` gives 3. */
   starThresholds: { two: number; three: number };
   escape: { enabled: boolean; wallSpeed: number };
-  hint?: string;
+  /** On-screen onboarding hints, shown one after another. */
+  hints?: HintDef[];
+}
+
+/** A hint stays visible until its condition is met, then the next hint (if any) appears. */
+export interface HintDef {
+  text: string;
+  until: 'move' | 'pulse' | 'seconds';
+  /** Required when until === 'seconds'. */
+  seconds?: number;
 }

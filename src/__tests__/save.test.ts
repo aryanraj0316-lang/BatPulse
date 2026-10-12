@@ -21,7 +21,7 @@ describe('save: basics', () => {
     m.mutate((d) => {
       d.shards = 321;
       d.selectedCharacter = 'bat_rookie';
-      d.records[3] = { levelId: 3, unlocked: true, completed: true, stars: 2, bestTime: 12.5, bestSonarUsed: 3, ghostRun: false, perfectEcho: true };
+      d.records[3] = { levelId: 3, unlocked: true, completed: true, stars: 2, bestTime: 12.5, bestMomentum: 1.3, ghostRun: false };
     });
     await m.flush();
     const m2 = new SaveManager(storage);
@@ -67,7 +67,8 @@ describe('save: corruption recovery', () => {
     const r = await m.load();
     expect(r.source).toBe('backup');
     expect(r.recovered).toBe(true);
-    expect(m.data.shards).toBe(100); // previous write; never worse than one step behind
+    expect(m.data.shards).toBe(250); // the backup is an identical copy: nothing is lost
+    expect(storage.map.get(SAVE_KEYS.corrupt)).toBe(good.slice(0, good.length / 2)); // damaged blob kept for forensics
     // primary healed
     expect(decodeEnvelope(storage.map.get(SAVE_KEYS.primary)!)).not.toBeNull();
   });
@@ -93,14 +94,25 @@ describe('save: corruption recovery', () => {
     expect(storage.map.get(SAVE_KEYS.corrupt)).toBe('{{{not json');
   });
 
-  it('a corrupt primary is never copied over a good backup', async () => {
+  it('both files always hold the same, latest save', async () => {
     const storage = await populate();
-    storage.map.set(SAVE_KEYS.primary, 'broken');
+    expect(storage.map.get(SAVE_KEYS.backup)).toBe(storage.map.get(SAVE_KEYS.primary));
     const m = new SaveManager(storage);
-    await m.load(); // heals from backup (shards 100)
+    await m.load();
     m.mutate((d) => (d.shards += 5));
     await m.flush();
-    expect(decodeEnvelope(storage.map.get(SAVE_KEYS.backup)!)!.data.shards).toBe(100);
+    expect(storage.map.get(SAVE_KEYS.backup)).toBe(storage.map.get(SAVE_KEYS.primary));
+    expect(decodeEnvelope(storage.map.get(SAVE_KEYS.backup)!)!.data.shards).toBe(255);
+  });
+  it('a corrupt backup alone is repaired from the primary on the next save', async () => {
+    const storage = await populate();
+    storage.map.set(SAVE_KEYS.backup, 'junk');
+    const m = new SaveManager(storage);
+    const r = await m.load();
+    expect(r.source).toBe('primary');
+    m.mutate((d) => (d.shards += 1));
+    await m.flush();
+    expect(decodeEnvelope(storage.map.get(SAVE_KEYS.backup)!)!.data.shards).toBe(251);
   });
 
   it('storage that throws never crashes load', async () => {
@@ -163,7 +175,6 @@ describe('save: migration', () => {
         shards: 480,
         records: { 1: { levelId: 1, unlocked: true, completed: true, stars: 3, bestTime: 9, bestSonarUsed: 2, ghostRun: true, perfectEcho: false } },
         unlockedAbilities: ['WIDE_PULSE'],
-        equippedAbilities: ['WIDE_PULSE'],
         endlessHighScore: 12,
       }),
     );
@@ -173,9 +184,10 @@ describe('save: migration', () => {
     expect(r.source).toBe('legacy');
     expect(m.data.shards).toBe(480);
     expect(m.data.records[1].stars).toBe(3);
-    expect(m.data.unlockedAbilities).toEqual(['WIDE_PULSE']);
-    expect(m.data.endlessHighScore).toBe(12);
-    expect(m.data.settings.soundEnabled).toBe(false);
+    // the retired ability/endless fields are dropped; shards and level progress survive
+    expect((m.data as any).unlockedAbilities).toBeUndefined();
+    expect(m.data.settings.sfxVolume).toBe(0); // legacy sound-off switch becomes zero volume
+    expect(m.data.settings.musicVolume).toBe(0);
     expect(m.data.saveVersion).toBe(SAVE_VERSION);
     expect(m.data.unlockedCharacters).toContain('bat_rookie');
     // persisted in the new format
@@ -189,7 +201,6 @@ describe('save: migration', () => {
       selectedCharacter: 'bat_turbo', // not unlocked -> falls back
       unlockedCharacters: ['bat_vesper'],
       hasSeenHeadphonePrompt: true,
-      endlessHighScore: 'many',
     });
     expect(out.shards).toBe(0);
     expect(out.records[2].stars).toBe(3);
@@ -199,7 +210,14 @@ describe('save: migration', () => {
     expect(out.unlockedCharacters).toEqual(['bat_rookie', 'bat_vesper']);
     expect(out.selectedCharacter).toBe('bat_rookie');
     expect(out.hasSeenHeadphonePrompt).toBe(true);
-    expect(out.endlessHighScore).toBe(0);
+  });
+
+  it('clamps volume and brightness settings', () => {
+    const out = migrateSave({ settings: { sfxVolume: 5, musicVolume: -1, brightness: 9 } });
+    expect(out.settings.sfxVolume).toBe(1);
+    expect(out.settings.musicVolume).toBe(0);
+    expect(out.settings.brightness).toBe(1.5);
+    expect(migrateSave({ settings: { brightness: 'x' } }).settings.brightness).toBe(1);
   });
 
   it('migrateSave of non-objects gives defaults', () => {

@@ -1,0 +1,90 @@
+{
+  "id": 1,
+  "name": "First Echo",
+  "chapter": 1,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 90,
+    "y": 570
+  },
+  "finish": {
+    "x": 310,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 160,
+      "y": 140,
+      "width": 200,
+      "height": 520,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 140,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 2
+  },
+  "ghostPulseLimit": 3,
+  "parTime": 10,
+  "starThresholds": {
+    "two": 20,
+    "three": 10
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  },
+  "hints": [
+    {
+      "text": "Drag on the right side to fly",
+      "until": "move"
+    },
+    {
+      "text": "Tap SONAR to send a pulse",
+      "until": "pulse"
+    },
+    {
+      "text": "Reach the purple ring",
+      "until": "seconds",
+      "seconds": 8
+    }
+  ]
+}

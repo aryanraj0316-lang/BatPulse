@@ -1,6 +1,11 @@
 import { LevelDef } from './schema';
 import { validateLevel } from './validate';
 import testLevel from './data/echo_test.json';
+import echo01 from './data/echo_01.json';
+import echo02 from './data/echo_02.json';
+import echo03 from './data/echo_03.json';
+import echo04 from './data/echo_04.json';
+import echo05 from './data/echo_05.json';
 
 /**
  * Registry of authored level files. A new level is added by dropping a JSON file in ./data
@@ -8,6 +13,11 @@ import testLevel from './data/echo_test.json';
  */
 const RAW_LEVELS: Record<number, unknown> = {
   0: testLevel,
+  1: echo01,
+  2: echo02,
+  3: echo03,
+  4: echo04,
+  5: echo05,
 };
 
 const strictByDefault = (): boolean => (typeof __DEV__ !== 'undefined' ? __DEV__ : true);

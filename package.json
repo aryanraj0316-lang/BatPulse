@@ -8,13 +8,16 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "levels": "node tools/buildLevels.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "buffer": "^6.0.3",
     "expo": "~57.0.18",
+    "expo-audio": "~57.0.5",
+    "expo-file-system": "~57.0.7",
     "expo-haptics": "~57.0.2",
     "expo-linear-gradient": "~57.0.1",
     "expo-status-bar": "~57.0.1",

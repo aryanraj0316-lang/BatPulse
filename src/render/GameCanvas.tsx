@@ -1,97 +1,56 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import {
-  PlayerEntity,
-  Rect as WallRect,
-  EnvObject,
-  Vec2,
-  SonarWaveEntity,
-  ImpactSpark,
-  AmbientDust,
-  WraithEntity,
-  GhostPoint,
-} from '../types/game';
-import { DarknessLayer } from './layers/DarknessLayer';
-import { GeometryLayer } from './layers/GeometryLayer';
-import { SonarWaveLayer } from './layers/SonarWaveLayer';
-import { ParticleLayer } from './layers/ParticleLayer';
-import { DustLayer } from './layers/DustLayer';
-import { PlayerLayer } from './layers/PlayerLayer';
-import { WraithLayer } from './layers/WraithLayer';
+import React, { useEffect, useReducer } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { VisualKey } from '../assets/keys';
+import { ECHO_CONFIG } from '../constants/gameConfig';
+import { FrameBus } from '../game/frameBus';
+import { GameSim } from '../sim/game';
+import { GameView } from './GameView';
 
-interface GameCanvasProps {
-  player: PlayerEntity;
-  walls: WallRect[];
-  objects: EnvObject[];
-  goal: Vec2 & { radius: number; revealedAt: number; revealStrength: number };
-  waves: SonarWaveEntity[];
-  sparks: ImpactSpark[];
-  dustParticles: AmbientDust[];
-  wraiths: WraithEntity[];
-  ghostTrack?: GhostPoint[];
-  now: number;
-  worldWidth: number;
-  worldHeight: number;
-  isHunting: boolean;
+interface Props {
+  sim: GameSim;
+  bus: FrameBus;
+  screenW: number;
+  screenH: number;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  batKey: VisualKey;
+  brightness: number;
 }
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({
-    player,
-    walls,
-    objects,
-    goal,
-    waves,
-    sparks,
-    dustParticles,
-    wraiths,
-    ghostTrack,
-    now,
-    worldWidth,
-    worldHeight,
-    isHunting,
-  }) => {
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {/* Layer 1: Ambient Darkness & Threat Vignette */}
-        <DarknessLayer
-          playerPos={player.pos}
-          worldWidth={worldWidth}
-          worldHeight={worldHeight}
-          isHunting={isHunting}
-        />
+const SHAKE_PX = 9;
 
-        {/* Layer 2: Geometry (Walls, Glass, Crystals, Chasms, Goal) */}
-        <GeometryLayer
-          walls={walls}
-          objects={objects}
-          goal={goal}
-          ghostTrack={ghostTrack}
-          now={now}
-          worldWidth={worldWidth}
-          worldHeight={worldHeight}
-        />
+/**
+ * Owns the per-frame redraw: subscribes to the frame bus and re-renders itself (and only itself),
+ * so the HUD and menus are not touched 60 times a second.
+ */
+export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, screenH, scale, offsetX, offsetY, batKey, brightness }) => {
+  const [, redraw] = useReducer((n: number) => (n + 1) | 0, 0);
+  useEffect(() => bus.subscribe(redraw), [bus]);
 
-        {/* Layer 3: Sonar 4-Layer Expanding Waves */}
-        <SonarWaveLayer waves={waves} worldWidth={worldWidth} worldHeight={worldHeight} />
+  const t = Date.now() / 1000;
+  // decaying jitter while the death shake runs
+  const k = sim.shake > 0 ? sim.shake / ECHO_CONFIG.death.shakeSec : 0;
+  const shakeX = k * SHAKE_PX * Math.sin(t * 90);
+  const shakeY = k * SHAKE_PX * Math.cos(t * 77);
 
-        {/* Layer 4: Returning Impact Sparks & Reverberations */}
-        <ParticleLayer sparks={sparks} worldWidth={worldWidth} worldHeight={worldHeight} />
-
-        {/* Layer 5: Ambient Drifting Dust Particles */}
-        <DustLayer dustParticles={dustParticles} worldWidth={worldWidth} worldHeight={worldHeight} />
-
-        {/* Layer 6: Player Bat Core & Momentum Arc */}
-        <PlayerLayer player={player} worldWidth={worldWidth} worldHeight={worldHeight} />
-
-        {/* Layer 7: Wraith Edge Flares & Detected Silhouettes */}
-        <WraithLayer
-          wraiths={wraiths}
-          playerPos={player.pos}
-          now={now}
-          worldWidth={worldWidth}
-          worldHeight={worldHeight}
-        />
-      </View>
-    );
-  };
-
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none" testID="game-canvas">
+      <GameView
+        sim={sim}
+        screenW={screenW}
+        screenH={screenH}
+        scale={scale}
+        offsetX={offsetX}
+        offsetY={offsetY}
+        batKey={batKey}
+        brightness={brightness}
+        time={t}
+        shakeX={shakeX}
+        shakeY={shakeY}
+      />
+      {k > 0 && <View style={[StyleSheet.absoluteFill, { backgroundColor: '#FF3B4E', opacity: 0.28 * k }]} />}
+    </View>
+  );
+});
+GameCanvas.displayName = 'GameCanvas';

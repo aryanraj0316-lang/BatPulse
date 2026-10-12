@@ -1,0 +1,181 @@
+{
+  "id": 5,
+  "name": "Silent Maze",
+  "chapter": 1,
+  "width": 380,
+  "height": 620,
+  "start": {
+    "x": 70,
+    "y": 550
+  },
+  "finish": {
+    "x": 310,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 20,
+      "height": 600,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 20,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 240,
+      "y": 20,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 600,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 120,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 120,
+      "width": 240,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 140,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 240,
+      "y": 140,
+      "width": 20,
+      "height": 140,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 240,
+      "width": 140,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 260,
+      "y": 240,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 260,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 360,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 360,
+      "width": 240,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 380,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 240,
+      "y": 380,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 480,
+      "width": 260,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 120,
+      "y": 500,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 240,
+      "y": 500,
+      "width": 20,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 600,
+      "width": 340,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 2
+  },
+  "ghostPulseLimit": 6,
+  "parTime": 20,
+  "starThresholds": {
+    "two": 45,
+    "three": 20
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  },
+  "hints": []
+}

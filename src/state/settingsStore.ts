@@ -1,71 +1,44 @@
 import { create } from 'zustand';
 import { saveManager } from '../save';
-import { defaultSave } from '../save/schema';
+import { defaultSave, SettingsSave } from '../save/schema';
 
-interface SettingsState {
-  soundEnabled: boolean;
-  hapticsEnabled: boolean;
-  floatingJoystick: boolean;
-  devModeUnlocked: boolean;
-
-  setSoundEnabled: (val: boolean) => void;
+interface SettingsState extends SettingsSave {
+  setSfxVolume: (v: number) => void;
+  setMusicVolume: (v: number) => void;
+  setBrightness: (v: number) => void;
   setHapticsEnabled: (val: boolean) => void;
   setFloatingJoystick: (val: boolean) => void;
-  unlockDevMode: () => void;
   /** Replaces in-memory state with the loaded save. Call once after saveManager.load(). */
   hydrate: () => void;
 }
 
-const saveSettings = (state: SettingsState) => {
+const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
+
+const persist = (s: SettingsSave) => {
   saveManager.mutate((d) => {
     d.settings = {
-      soundEnabled: state.soundEnabled,
-      hapticsEnabled: state.hapticsEnabled,
-      floatingJoystick: state.floatingJoystick,
-      devModeUnlocked: state.devModeUnlocked,
+      sfxVolume: s.sfxVolume,
+      musicVolume: s.musicVolume,
+      brightness: s.brightness,
+      hapticsEnabled: s.hapticsEnabled,
+      floatingJoystick: s.floatingJoystick,
     };
   });
 };
 
-const initial = defaultSave().settings;
-
-export const useSettingsStore = create<SettingsState>((set) => ({
-  soundEnabled: initial.soundEnabled ?? true,
-  hapticsEnabled: initial.hapticsEnabled ?? true,
-  floatingJoystick: initial.floatingJoystick ?? true,
-  devModeUnlocked: initial.devModeUnlocked ?? false,
-
-  hydrate: () => set({ ...saveManager.data.settings }),
-
-  setSoundEnabled: (val) => {
-    set((state) => {
-      const next = { ...state, soundEnabled: val };
-      saveSettings(next);
-      return next;
-    });
-  },
-
-  setHapticsEnabled: (val) => {
-    set((state) => {
-      const next = { ...state, hapticsEnabled: val };
-      saveSettings(next);
-      return next;
-    });
-  },
-
-  setFloatingJoystick: (val) => {
-    set((state) => {
-      const next = { ...state, floatingJoystick: val };
-      saveSettings(next);
-      return next;
-    });
-  },
-
-  unlockDevMode: () => {
-    set((state) => {
-      const next = { ...state, devModeUnlocked: true };
-      saveSettings(next);
-      return next;
-    });
-  },
-}));
+export const useSettingsStore = create<SettingsState>((set, get) => {
+  /** Applies a change, then persists exactly the settings slice. */
+  const update = (patch: Partial<SettingsSave>) => {
+    set(patch);
+    persist(get());
+  };
+  return {
+    ...defaultSave().settings,
+    hydrate: () => set({ ...saveManager.data.settings }),
+    setSfxVolume: (v) => update({ sfxVolume: clamp(v, 0, 1) }),
+    setMusicVolume: (v) => update({ musicVolume: clamp(v, 0, 1) }),
+    setBrightness: (v) => update({ brightness: clamp(v, 0.5, 1.5) }),
+    setHapticsEnabled: (val) => update({ hapticsEnabled: val }),
+    setFloatingJoystick: (val) => update({ floatingJoystick: val }),
+  };
+});

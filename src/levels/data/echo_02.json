@@ -1,0 +1,86 @@
+{
+  "id": 2,
+  "name": "Corridors of Silence",
+  "chapter": 1,
+  "width": 380,
+  "height": 660,
+  "start": {
+    "x": 70,
+    "y": 590
+  },
+  "finish": {
+    "x": 310,
+    "y": 70,
+    "radius": 18
+  },
+  "walls": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 380,
+      "height": 20,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 20,
+      "width": 260,
+      "height": 500,
+      "type": "normal"
+    },
+    {
+      "x": 360,
+      "y": 20,
+      "width": 20,
+      "height": 640,
+      "type": "normal"
+    },
+    {
+      "x": 0,
+      "y": 520,
+      "width": 20,
+      "height": 140,
+      "type": "normal"
+    },
+    {
+      "x": 20,
+      "y": 640,
+      "width": 340,
+      "height": 20,
+      "type": "normal"
+    }
+  ],
+  "spikes": [],
+  "movingHazards": [],
+  "switches": [],
+  "doors": [],
+  "pickups": [],
+  "enemies": [],
+  "checkpoints": [],
+  "sonar": {
+    "mode": "recharge",
+    "charges": 3,
+    "rechargeSec": 2
+  },
+  "ghostPulseLimit": 3,
+  "parTime": 11,
+  "starThresholds": {
+    "two": 22,
+    "three": 11
+  },
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  },
+  "hints": [
+    {
+      "text": "Pulses recharge. Use them to find the walls",
+      "until": "pulse"
+    },
+    {
+      "text": "Keep moving to build momentum",
+      "until": "seconds",
+      "seconds": 6
+    }
+  ]
+}

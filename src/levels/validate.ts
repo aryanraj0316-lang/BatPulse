@@ -84,6 +84,16 @@ export function validateLevel(raw: unknown): string[] {
   if (!t || !isNum(t.two) || !isNum(t.three) || t.three <= 0 || t.three > t.two) bad('starThresholds needs two >= three > 0 (seconds)');
   if (!l.escape || typeof l.escape.enabled !== 'boolean' || !isNum(l.escape.wallSpeed) || l.escape.wallSpeed < 0) bad('escape needs enabled:boolean and wallSpeed >= 0');
 
+  if (l.hints !== undefined) {
+    if (!Array.isArray(l.hints)) bad('hints must be an array');
+    else
+      l.hints.forEach((h: any, i: number) => {
+        if (!h || typeof h.text !== 'string' || !h.text) bad(`hints[${i}].text must be a non-empty string`);
+        else if (!['move', 'pulse', 'seconds'].includes(h.until)) bad(`hints[${i}].until must be move|pulse|seconds`);
+        else if (h.until === 'seconds' && !(isNum(h.seconds) && h.seconds > 0)) bad(`hints[${i}].seconds must be > 0`);
+      });
+  }
+
   // Geometry sanity: start must not sit inside a wall.
   if (errs.length === 0) {
     for (const w of l.walls) {

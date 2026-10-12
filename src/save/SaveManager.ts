@@ -48,7 +48,7 @@ export function decodeEnvelope(blob: string | null): { data: SaveData; version: 
 /**
  * Owns the in-memory save and every write to disk.
  * - Writes are serialised through one promise chain, so two quick updates can never interleave.
- * - Before replacing the primary file it is copied to the backup (only if it was itself valid).
+ * - Every save writes the primary file and then an identical backup copy, so damage to one file loses nothing.
  * - load() falls back primary -> backup -> legacy keys -> clean default and heals the primary.
  */
 export class SaveManager {
@@ -72,9 +72,11 @@ export class SaveManager {
   async load(): Promise<LoadResult> {
     let result: LoadResult | null = null;
     let primaryBlob: string | null = null;
+    let primaryBroken = false;
     try {
       primaryBlob = await this.storage.getItem(SAVE_KEYS.primary);
       const primary = decodeEnvelope(primaryBlob);
+      primaryBroken = primaryBlob !== null && !primary;
       if (primary) {
         if (primary.version > SAVE_VERSION) this.readOnly = true;
         result = { data: primary.data, source: 'primary', recovered: false };
@@ -89,8 +91,8 @@ export class SaveManager {
     }
 
     const damaged = result === null && primaryBlob !== null;
-    if (damaged) {
-      // Keep the unreadable blob for forensics instead of silently destroying it.
+    if (primaryBroken) {
+      // Keep the unreadable blob for forensics instead of silently destroying it (even when the backup saved the day).
       try {
         await this.storage.setItem(SAVE_KEYS.corrupt, primaryBlob as string);
       } catch (e) {
@@ -134,9 +136,9 @@ export class SaveManager {
     const snapshot = encodeEnvelope(this.current);
     this.chain = this.chain.then(async () => {
       try {
-        const existing = await this.storage.getItem(SAVE_KEYS.primary);
-        if (existing && decodeEnvelope(existing)) await this.storage.setItem(SAVE_KEYS.backup, existing);
         await this.storage.setItem(SAVE_KEYS.primary, snapshot);
+        // identical second copy: if either file is ever damaged, the other holds the same, latest progress
+        await this.storage.setItem(SAVE_KEYS.backup, snapshot);
       } catch (e) {
         this.lastError = e; // a later mutate rewrites the full snapshot, so nothing is lost permanently
       }
