@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "levels": "node tools/buildLevels.js",
     "e2e:phase1": "node tools/e2e/phase1.js",
-    "e2e:phase2": "node tools/e2e/phase2.js"
+    "e2e:phase2": "node tools/e2e/phase2.js",
+    "e2e:phase3": "node tools/e2e/phase3.js",
+    "e2e:phase4": "node tools/e2e/phase4.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",

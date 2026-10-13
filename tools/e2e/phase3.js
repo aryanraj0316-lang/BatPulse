@@ -197,7 +197,7 @@ const seed = () => {
       await toFinish(h);
       check(`Echo ${n}: finished as a Ghost Run`, await h.exists('ghost-badge'));
     }
-    check('Next is hidden after the last level', !(await h.exists('btn-next')));
+    check('after Echo 35 the game continues into Chapter 3 (Next is offered)', await h.exists('btn-next'));
 
     // ---- level select: progress and badges
     await h.tapTestId('btn-home');
