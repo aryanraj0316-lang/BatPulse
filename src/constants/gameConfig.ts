@@ -50,6 +50,22 @@ export const ECHO_CONFIG = {
     dailyLoginMax: 100,
     dailyStreakBonus: 100, // on day 7 of a streak
     dailyStreakDays: 7,
+    /** Chapter mastery: bonus shards the first time this share of a chapter's stars is reached. */
+    masteryMilestones: [
+      { pct: 0.25, bonus: 20 },
+      { pct: 0.5, bonus: 30 },
+      { pct: 0.75, bonus: 50 },
+      { pct: 1, bonus: 100 },
+    ],
+  },
+  /** Daily reward trusted time: the phone clock is never trusted for the daily reward. */
+  trustedTime: {
+    // first reachable source wins; each parser turns the response into UTC milliseconds
+    sources: [
+      { url: 'https://worldtimeapi.org/api/timezone/Etc/UTC', kind: 'worldtimeapi' },
+      { url: 'https://timeapi.io/api/Time/current/zone?timeZone=UTC', kind: 'timeapi' },
+    ] as { url: string; kind: 'worldtimeapi' | 'timeapi' }[],
+    timeoutMs: 6000,
   },
   enemy: {
     radius: 16,
@@ -109,11 +125,12 @@ export const ECHO_CONFIG = {
     timeBonusPerSec: 50, // per second under 2x par time
   },
   characters: {
-    bat_rookie: { name: 'The Rookie', price: 0, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
-    bat_vesper: { name: 'Vesper', price: 1500, glowBonusSec: 2, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
-    bat_sonarbot: { name: 'Sonar-Bot', price: 3500, glowBonusSec: 0, radiusMult: 1.5, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
-    bat_phantom: { name: 'Phantom', price: 6000, glowBonusSec: 0, radiusMult: 1, hearingMult: 0.5, momentumRateMult: 1, momentumCap: 2.0 },
-    bat_turbo: { name: 'Turbo Moth', price: 10000, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 2, momentumCap: 4.0 },
+    // Names, prices and every stat are data: rename or retune here, nothing else changes.
+    bat_rookie: { name: 'The Rookie', tagline: 'Balanced wings, normal pulse', price: 0, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_vesper: { name: 'Vesper', tagline: 'High-frequency bat: walls and spikes glow 2 s longer', price: 1500, glowBonusSec: 2, radiusMult: 1, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_sonarbot: { name: 'Sonar-Bot', tagline: 'Cyber bat: pulse radius x1.5', price: 3500, glowBonusSec: 0, radiusMult: 1.5, hearingMult: 1, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_phantom: { name: 'Phantom', tagline: 'The whisperer: hunters hear its pulses at half range', price: 6000, glowBonusSec: 0, radiusMult: 1, hearingMult: 0.5, momentumRateMult: 1, momentumCap: 2.0 },
+    bat_turbo: { name: 'Turbo Moth', tagline: 'Momentum builds twice as fast, up to x4.0', price: 10000, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 2, momentumCap: 4.0 },
   } as Record<string, CharacterStats>,
   perf: {
     targetFps: 60,
@@ -127,6 +144,7 @@ export const ECHO_CONFIG = {
 
 export interface CharacterStats {
   name: string;
+  tagline: string;
   price: number;
   glowBonusSec: number;
   radiusMult: number;

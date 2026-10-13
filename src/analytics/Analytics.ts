@@ -9,7 +9,10 @@ export type AnalyticsEvent =
   | { name: 'ghost_run'; levelId: number }
   | { name: 'shard_earned'; amount: number; source: string }
   | { name: 'shard_spent'; amount: number; item: string }
-  | { name: 'character_unlocked'; characterId: string };
+  | { name: 'character_unlocked'; characterId: string }
+  | { name: 'character_selected'; characterId: string }
+  | { name: 'daily_claimed'; day: number; amount: number }
+  | { name: 'mastery_milestone'; chapterId: number; pct: number; bonus: number };
 
 export type AnalyticsSink = (event: AnalyticsEvent, timestamp: number) => void;
 

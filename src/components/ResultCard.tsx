@@ -14,6 +14,8 @@ export interface ResultData {
   ghostRun: boolean;
   /** Shards from the first-time Ghost Run bonus (0 when already earned). */
   ghostBonus: number;
+  /** Shards from a chapter mastery milestone reached by this clear (included in shardsEarned). */
+  masteryBonus: number;
   /** seconds needed for the next star, if not at 3 stars */
   nextStarAt: number | null;
 }
@@ -52,6 +54,12 @@ export const ResultCard: React.FC<Props> = ({ visible, levelNumber, levelTitle, 
         {result.ghostRun && (
           <View style={styles.ghost} testID="ghost-badge">
             <Text style={styles.ghostText}>🦇 GHOST RUN{result.ghostBonus > 0 ? `  +${result.ghostBonus} ✦` : ''}</Text>
+          </View>
+        )}
+
+        {result.masteryBonus > 0 && (
+          <View style={styles.ghost} testID="mastery-badge">
+            <Text style={styles.ghostText}>★ CHAPTER MASTERY  +{result.masteryBonus} ✦</Text>
           </View>
         )}
 

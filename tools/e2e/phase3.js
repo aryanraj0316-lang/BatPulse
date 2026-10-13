@@ -47,7 +47,7 @@ const seed = () => {
   for (let i = 1; i <= 35; i++) records[i] = { levelId: i, unlocked: true, completed: i <= 20, stars: i <= 20 ? 1 : 0, bestTime: i <= 20 ? 30 : null, bestMomentum: i <= 20 ? 1 : null, ghostRun: false };
   return {
     saveVersion: 2, shards: 0, selectedCharacter: 'bat_rookie', unlockedCharacters: ['bat_rookie'], records,
-    hasSeenHeadphonePrompt: true,
+    hasSeenHeadphonePrompt: true, claimedMilestones: ['1:25'],
     settings: { sfxVolume: 0.8, musicVolume: 0.5, brightness: 1, hapticsEnabled: true, floatingJoystick: true },
     daily: { lastClaimDay: null, streak: 0 },
   };

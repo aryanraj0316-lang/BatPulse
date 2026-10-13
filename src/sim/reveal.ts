@@ -176,7 +176,8 @@ export function applyWaves(
       const falloff = edgeFalloff(d, max);
       if (falloff < 0.02) continue;
       const surf = surfaceGlow(it.variant);
-      const bonus = it.kind === 'finish' ? 0 : extraSec;
+      // Vesper: walls and spikes stay lit longer (nothing else)
+      const bonus = it.kind === 'wall' || it.kind === 'spike' ? extraSec : 0;
       // hunters are only seen for a moment after a wave touches them
       const seconds = it.kind === 'enemy' ? ECHO_CONFIG.enemy.visibleOnHitSec : surf.fixedSec !== undefined ? surf.fixedSec : (baseSec + bonus) * surf.secMult;
       reveal.hit(i, falloff * surf.brightMult, seconds);

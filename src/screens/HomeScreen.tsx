@@ -8,11 +8,13 @@ import { DEBUG_ENABLED } from '../debug/debugFlags';
 import { DEV_KEYS } from '../constants/gameConfig';
 import { audio } from '../audio';
 import { authoredLevelIds } from '../levels/loader';
+import { DailyRewardCard } from '../components/DailyRewardCard';
 
 interface HomeScreenProps {
   onPlay: (levelId: number) => void;
   onLevelSelect: () => void;
   onSettings: () => void;
+  onShop: () => void;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -21,6 +23,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onPlay,
   onLevelSelect,
   onSettings,
+  onShop,
 }) => {
   const { records, shards } = useProgressStore();
 
@@ -129,6 +132,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         <TouchableOpacity style={styles.menuButton} onPress={onLevelSelect} activeOpacity={0.7}>
           <Text style={styles.menuButtonText}>≡ SELECT ECHO CHAMBER</Text>
+        </TouchableOpacity>
+
+        <DailyRewardCard />
+
+        <TouchableOpacity style={styles.menuButton} onPress={onShop} activeOpacity={0.7} testID="btn-shop">
+          <Text style={styles.menuButtonText}>✦ BAT SHOP</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuButton} onPress={onSettings} activeOpacity={0.7}>

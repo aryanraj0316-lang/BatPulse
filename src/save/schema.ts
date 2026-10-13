@@ -18,6 +18,8 @@ export interface SaveData {
   /** Per-level progress, keyed by level id. */
   records: Record<number, LevelRecord>;
   hasSeenHeadphonePrompt: boolean;
+  /** Chapter mastery bonuses already paid, as "chapter:percent" (e.g. "1:50"). */
+  claimedMilestones: string[];
   settings: SettingsSave;
   daily: { lastClaimDay: number | null; streak: number };
 }
@@ -31,6 +33,7 @@ export const defaultSave = (): SaveData => ({
     1: { levelId: 1, unlocked: true, completed: false, stars: 0, bestTime: null, bestMomentum: null, ghostRun: false },
   },
   hasSeenHeadphonePrompt: false,
+  claimedMilestones: [],
   settings: { sfxVolume: 0.8, musicVolume: 0.5, brightness: 1, hapticsEnabled: true, floatingJoystick: true },
   daily: { lastClaimDay: null, streak: 0 },
 });
@@ -42,6 +45,13 @@ const strArr = (v: unknown, fb: string[]) => (Array.isArray(v) && v.every((x) =>
 const clamp01 = (v: unknown, fb: number, lo = 0, hi = 1) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fb;
 const finiteOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+function normalizeBestTimes(v: unknown): Record<string, number> | undefined {
+  if (!isObj(v)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, t] of Object.entries(v)) if (typeof t === 'number' && Number.isFinite(t) && t > 0) out[k] = t;
+  return Object.keys(out).length ? out : undefined;
+}
 
 function normalizeRecords(v: unknown, fb: SaveData['records']): SaveData['records'] {
   if (!isObj(v)) return fb;
@@ -57,6 +67,7 @@ function normalizeRecords(v: unknown, fb: SaveData['records']): SaveData['record
       bestTime: finiteOrNull(r.bestTime),
       bestMomentum: finiteOrNull(r.bestMomentum),
       ghostRun: bool(r.ghostRun, false),
+      bestTimes: normalizeBestTimes(r.bestTimes),
     };
   }
   return Object.keys(out).length > 0 ? out : fb;
@@ -85,6 +96,7 @@ export function migrateSave(raw: unknown): SaveData {
     unlockedCharacters,
     records: normalizeRecords(raw.records, d.records),
     hasSeenHeadphonePrompt: bool(raw.hasSeenHeadphonePrompt, false),
+    claimedMilestones: Array.isArray(raw.claimedMilestones) ? [...new Set(raw.claimedMilestones.filter((x: unknown): x is string => typeof x === 'string'))] : [],
     settings: {
       // legacy builds stored a single on/off switch: off maps to zero volume
       sfxVolume: clamp01(settings.sfxVolume, settings.soundEnabled === false ? 0 : d.settings.sfxVolume),

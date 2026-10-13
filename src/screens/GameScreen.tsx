@@ -25,6 +25,7 @@ import { GameCanvas } from '../render/GameCanvas';
 import { GameSim, SimEvent } from '../sim/game';
 import { scoreFor, starsForTime } from '../sim/scoring';
 import { buildWorld, fitViewport, pulseRadiusWorld } from '../sim/world';
+import { simParamsFor } from '../game/characters';
 import { useProgressStore } from '../state/progressStore';
 import { useSettingsStore } from '../state/settingsStore';
 
@@ -83,29 +84,23 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
   const floating = useSettingsStore((s) => s.floatingJoystick);
   const recordVictory = useProgressStore((s) => s.recordVictory);
 
-  const character = ECHO_CONFIG.characters[batKey] ?? ECHO_CONFIG.characters.bat_rookie;
-
   // fit the level into the area below the HUD
   // (levels taller than the screen are scaled to the width and the camera follows the bat)
   const view = useMemo(() => {
     const top = insets.top + HUD_HEIGHT;
     return fitViewport(SW, top, Math.max(100, SH - top - insets.bottom), def.width, def.height);
   }, [SW, SH, insets.top, insets.bottom, def.width, def.height]);
-  const pulseRadius = pulseRadiusWorld(SW, view.scale, ECHO_CONFIG.sonar.maxRadiusScreenFraction, character.radiusMult);
+  // every ability of the chosen bat turns into numbers in one place (see game/characters.ts)
+  const simParams = simParamsFor(batKey, pulseRadiusWorld(SW, view.scale, ECHO_CONFIG.sonar.maxRadiusScreenFraction));
+  const pulseRadius = simParams.pulseRadius;
 
   const world = useMemo(() => buildWorld(def, ECHO_CONFIG.world.wallSegmentLen), [def]);
   const sim = useMemo(
     () =>
-      new GameSim(world, {
-        pulseRadius,
-        glowBonusSec: character.glowBonusSec,
-        momentumRateMult: character.momentumRateMult,
-        momentumMax: character.momentumCap,
-        hearingMult: character.hearingMult,
-      }),
+      new GameSim(world, simParams),
     // a new sim only when the level or the character changes; the radius is updated in place below
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [world, character],
+    [world, batKey],
   );
   useEffect(() => sim.setPulseRadius(pulseRadius), [sim, pulseRadius]);
 
@@ -187,7 +182,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
           const ghostRun = sim.isGhostRun;
           const res =
             def.id === 0
-              ? { firstClear: false, shardsEarned: 0, isNewBestTime: false, newBestStars: false, ghostBonus: 0 }
+              ? { firstClear: false, shardsEarned: 0, isNewBestTime: false, newBestStars: false, ghostBonus: 0, masteryBonus: 0 }
               : recordVictory(def.id, { timeSec, stars, momentum, bestMomentum, ghostRun });
           if (ghostRun) Analytics.track({ name: 'ghost_run', levelId: def.id });
           Analytics.track({ name: 'level_complete', levelId: def.id, timeSec, stars, pulses: sim.pulsesUsed, momentum: bestMomentum });
@@ -202,6 +197,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
             isNewBestTime: res.isNewBestTime,
             ghostRun,
             ghostBonus: res.ghostBonus,
+            masteryBonus: res.masteryBonus,
             nextStarAt,
           });
           break;

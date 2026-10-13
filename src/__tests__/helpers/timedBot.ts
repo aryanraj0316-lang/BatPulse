@@ -295,11 +295,13 @@ export function flyTimed(
       const sw = leg.sw;
       const alreadyOpen = world.doorSwitch.some((si, di) => world.switches[si] === sw && sim.doorTimer[di] > 0.5);
       if (alreadyOpen) continue;
+      // a bigger pulse (Sonar-Bot) reaches a switch from proportionally further away
+      const reach = PULSE_REACH * ((params.pulseRadius ?? 150) / 150);
       const quietRange = Math.max(sim.hearingRadius, ECHO_CONFIG.enemy.switchNoiseRadius) + 25;
       const goal = (c: number, r: number, k: number) => {
         const x = c * CELL + CELL / 2;
         const y = r * CELL + CELL / 2;
-        if (Math.hypot(x - sw.x, y - sw.y) > PULSE_REACH || !losClear(world, x, y, sw.x, sw.y)) return false;
+        if (Math.hypot(x - sw.x, y - sw.y) > reach || !losClear(world, x, y, sw.x, sw.y)) return false;
         {
           // the switch pulse and its click must not be heard by any hunter at that moment, in loud runs too:
           // the noise in a loud run is made on purpose later, not by accident at a switch

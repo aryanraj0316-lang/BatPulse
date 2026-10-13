@@ -10,6 +10,7 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { LevelSelectScreen } from './src/screens/LevelSelectScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { ShopScreen } from './src/screens/ShopScreen';
 import { SplashScreen } from './src/screens/SplashScreen';
 import { HeadphonePrompt } from './src/components/HeadphonePrompt';
 import { saveManager } from './src/save';
@@ -84,12 +85,14 @@ export default function App() {
         {screen === 'SPLASH' && hasSeenHeadphonePrompt && <SplashScreen onDone={afterSplash} />}
 
         {screen === 'HOME' && (
-          <HomeScreen onPlay={startGame} onLevelSelect={() => setScreen('LEVEL_SELECT')} onSettings={() => setScreen('SETTINGS')} />
+          <HomeScreen onPlay={startGame} onLevelSelect={() => setScreen('LEVEL_SELECT')} onSettings={() => setScreen('SETTINGS')} onShop={() => setScreen('SHOP')} />
         )}
 
         {screen === 'LEVEL_SELECT' && <LevelSelectScreen onSelectLevel={startGame} onBack={goHome} />}
 
         {screen === 'SETTINGS' && <SettingsScreen onBack={goHome} />}
+
+        {screen === 'SHOP' && <ShopScreen onBack={goHome} />}
 
         {screen === 'GAME' && (
           <GameScreen

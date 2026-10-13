@@ -161,9 +161,12 @@ export class GameSim {
     return this.enemies.alertCount;
   }
 
-  /** Completed (so far) with no hunter ever alerted and within the level's pulse limit. */
+  /**
+   * Completed (so far) with no hunter ever alerted and within the level's pulse limit.
+   * Only levels that have hunters can be ghost-run: with nobody to evade there is nothing to be a ghost against.
+   */
   get isGhostRun(): boolean {
-    return this.enemies.alertCount === 0 && this.pulsesUsed <= this.world.def.ghostPulseLimit;
+    return this.world.enemies.length > 0 && this.enemies.alertCount === 0 && this.pulsesUsed <= this.world.def.ghostPulseLimit;
   }
 
   /** How far a pulse is heard by hunters, in world units. */

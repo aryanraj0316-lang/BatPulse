@@ -14,6 +14,8 @@ export interface LevelRecord {
   bestMomentum: number | null;
   /** Completed with zero enemy alerts and within the pulse limit (Phase 3). */
   ghostRun: boolean;
+  /** Best clear time per character id (leaderboards are per character, or Rookie-only). */
+  bestTimes?: Record<string, number>;
 }
 
-export type GameScreenState = 'SPLASH' | 'HOME' | 'LEVEL_SELECT' | 'GAME' | 'SETTINGS';
+export type GameScreenState = 'SPLASH' | 'HOME' | 'LEVEL_SELECT' | 'GAME' | 'SETTINGS' | 'SHOP';

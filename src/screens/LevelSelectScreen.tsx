@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { PALETTE } from '../constants/palette';
 import { useProgressStore } from '../state/progressStore';
+import { chapterMilestoneStates } from '../state/mastery';
 import { CHAPTERS, chapterLevelIds, chapterProgress, isLevelUnlocked } from '../levels/chapters';
 import { hasAuthoredLevel } from '../levels/loader';
 
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export const LevelSelectScreen: React.FC<Props> = ({ onSelectLevel, onBack }) => {
-  const { records, shards } = useProgressStore();
+  const { records, shards, claimedMilestones: claimed } = useProgressStore();
 
   return (
     <View style={styles.container}>
@@ -36,7 +37,16 @@ export const LevelSelectScreen: React.FC<Props> = ({ onSelectLevel, onBack }) =>
               </Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${(prog.stars / prog.maxStars) * 100}%` }]} />
+                {/* mastery milestones: a tick on the bar, bright once reached */}
+                {chapterMilestoneStates(chapter, records, claimed).map((m) => (
+                  <View key={m.key} style={[styles.milestoneTick, { left: `${m.pct * 100 - 1}%` }, m.reached && styles.milestoneReached]} />
+                ))}
               </View>
+              <Text style={styles.milestoneText} testID={`mastery-${chapter.id}`}>
+                {chapterMilestoneStates(chapter, records, claimed)
+                  .map((m) => `${Math.round(m.pct * 100)}% ${m.claimed ? '✓' : `+${m.bonus}✦`}`)
+                  .join('   ')}
+              </Text>
               <Text style={styles.progressText}>
                 ★ {prog.stars} / {prog.maxStars} · {prog.completed} / {prog.total} cleared
               </Text>
@@ -107,6 +117,9 @@ const styles = StyleSheet.create({
   chapterTag: { fontSize: 9, fontWeight: '800', color: PALETTE.sonarCyan, letterSpacing: 2 },
   chapterName: { fontSize: 18, fontWeight: '900', color: '#F8FAFC', letterSpacing: 2, marginTop: 2 },
   progressTrack: { height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', marginTop: 10, overflow: 'hidden' },
+  milestoneTick: { position: 'absolute', top: 0, width: 2, height: '100%', backgroundColor: 'rgba(255,255,255,0.35)' },
+  milestoneReached: { backgroundColor: '#FFFFFF' },
+  milestoneText: { fontSize: 9, color: '#64748B', marginTop: 4, letterSpacing: 0.8 },
   progressFill: { height: '100%', backgroundColor: PALETTE.shardGold },
   progressText: { fontSize: 10, color: '#94A3B8', marginTop: 6, letterSpacing: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
