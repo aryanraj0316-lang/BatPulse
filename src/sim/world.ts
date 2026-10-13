@@ -64,6 +64,9 @@ export function wallPieces(b: Box, maxLen: number, edge: number): Box[] {
   return strips.flatMap((s) => segments(s, maxLen));
 }
 
+/** Finish ring radius when a level does not set one. */
+export const DEFAULT_FINISH_RADIUS = 18;
+
 export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECHO_CONFIG.world.edgeThickness): World {
   const solids: Box[] = def.walls.map((w) => ({ x: w.x, y: w.y, width: w.width, height: w.height }));
   const spikes: Box[] = def.spikes.map((s) => ({ ...s }));
@@ -87,7 +90,7 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
   def.enemies.forEach((e, i) =>
     revealables.push({ x: e.waypoints[0].x - er, y: e.waypoints[0].y - er, width: er * 2, height: er * 2, kind: 'enemy', variant: 'normal', ref: i }),
   );
-  const finish = { x: def.finish.x, y: def.finish.y, radius: def.finish.radius ?? 18 };
+  const finish = { x: def.finish.x, y: def.finish.y, radius: def.finish.radius ?? DEFAULT_FINISH_RADIUS };
   revealables.push({
     x: finish.x - finish.radius,
     y: finish.y - finish.radius,

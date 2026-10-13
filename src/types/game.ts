@@ -18,4 +18,11 @@ export interface LevelRecord {
   bestTimes?: Record<string, number>;
 }
 
-export type GameScreenState = 'SPLASH' | 'HOME' | 'LEVEL_SELECT' | 'GAME' | 'SETTINGS' | 'SHOP';
+/** A clear time waiting to be sent to the leaderboard (kept in the save so offline play is never lost). */
+export interface ScoreSubmission {
+  levelId: number;
+  character: string;
+  timeSec: number;
+}
+
+export type GameScreenState = 'SPLASH' | 'HOME' | 'LEVEL_SELECT' | 'GAME' | 'SETTINGS' | 'SHOP' | 'LEADERBOARD';

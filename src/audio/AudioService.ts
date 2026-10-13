@@ -1,4 +1,6 @@
 import { SoundKey } from '../assets/keys';
+import { reverbTaps } from './reverb';
+import { ECHO_CONFIG } from '../constants/gameConfig';
 
 /** One playable instance of a sound. Implemented by the platform backend. */
 export interface PlayerHandle {
@@ -20,7 +22,16 @@ export interface AudioBackend {
 export interface Volumes {
   sfx: number;
   music: number;
+  /** Cave echo on pulses (default on). */
+  reverb?: boolean;
 }
+
+/** Injectable timer so tests can control time. */
+export interface Scheduler {
+  set(fn: () => void, ms: number): unknown;
+  clear(handle: unknown): void;
+}
+const realScheduler: Scheduler = { set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) };
 
 /** Minimum gap between two plays of the same key, so rapid taps never stack into noise. */
 const MIN_GAP_MS: Partial<Record<SoundKey, number>> = {
@@ -55,7 +66,10 @@ export class AudioService {
     private readonly backend: AudioBackend,
     private readonly getVolumes: () => Volumes,
     private readonly now: () => number = Date.now,
+    private readonly scheduler: Scheduler = realScheduler,
   ) {}
+
+  private echoTimers = new Set<unknown>();
 
   /** Loads the given sounds. Keys that fail to load are skipped (and stay silent). */
   async preload(keys: readonly SoundKey[], musicKey: SoundKey | null = null): Promise<void> {
@@ -63,7 +77,8 @@ export class AudioService {
     await Promise.all(
       keys.map(async (key) => {
         try {
-          const copies = key === musicKey ? 1 : SFX_COPIES;
+          // the ping plays together with its echoes: give it a player for each, plus spare, so no echo cuts the dry sound
+          const copies = key === musicKey ? 1 : key === 'sfx_ping' ? Math.max(SFX_COPIES, ECHO_CONFIG.audio.reverb.taps + 2) : SFX_COPIES;
           const players = await this.backend.load(key, copies);
           if (key === musicKey) players.forEach((p) => p.setLoop(true));
           this.entries.set(key, { players, next: 0, lastPlayedAt: -Infinity });
@@ -99,6 +114,42 @@ export class AudioService {
     }
   }
 
+  /**
+   * A pulse sound followed by the cave echo (decaying repeats). `roomScale` 1 = a normal cave.
+   * The echo is skipped when reverb is off, and it never survives a pause/stop.
+   */
+  playWithEcho(key: SoundKey, roomScale: number = 1, gain: number = 1): boolean {
+    const dry = this.play(key, gain);
+    if (!dry || this.getVolumes().reverb === false) return dry;
+    for (const tap of reverbTaps(roomScale)) {
+      const handle = this.scheduler.set(() => {
+        this.echoTimers.delete(handle);
+        this.playEchoTap(key, gain * tap.gain);
+      }, tap.delaySec * 1000);
+      this.echoTimers.add(handle);
+    }
+    return dry;
+  }
+
+  /** One echo repeat: same pool as the dry sound but not subject to its minimum gap. */
+  private playEchoTap(key: SoundKey, gain: number): void {
+    const entry = this.entries.get(key);
+    if (!entry || this.paused) return;
+    const volume = this.getVolumes().sfx * clamp01(gain);
+    if (volume <= 0) return;
+    const player = entry.players[entry.next];
+    entry.next = (entry.next + 1) % entry.players.length;
+    safe(() => {
+      player.setVolume(volume);
+      player.restart();
+    });
+  }
+
+  private cancelEchoes(): void {
+    for (const h of this.echoTimers) this.scheduler.clear(h);
+    this.echoTimers.clear();
+  }
+
   startMusic(): void {
     this.musicPlaying = true;
     this.applyMusic();
@@ -126,6 +177,7 @@ export class AudioService {
   /** App went to background / call came in: silence everything. */
   pauseAll(): void {
     this.paused = true;
+    this.cancelEchoes();
     for (const e of this.entries.values()) e.players.forEach((p) => safe(() => p.pause()));
   }
 
@@ -136,10 +188,12 @@ export class AudioService {
 
   stopAll(): void {
     this.musicPlaying = false;
+    this.cancelEchoes();
     for (const e of this.entries.values()) e.players.forEach((p) => safe(() => p.stop()));
   }
 
   release(): void {
+    this.cancelEchoes();
     for (const e of this.entries.values()) e.players.forEach((p) => safe(() => p.release()));
     this.entries.clear();
   }

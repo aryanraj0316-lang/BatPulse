@@ -22,6 +22,8 @@ export interface VictoryResult {
   shardsEarned: number;
   isNewBestTime: boolean;
   newBestStars: boolean;
+  /** This run beat the player's best time with the bat that flew it (the leaderboard cares about this one). */
+  newCharacterBest: boolean;
   /** Shards from the first-time Ghost Run bonus (included in shardsEarned). */
   ghostBonus: number;
   /** Chapter mastery milestones reached by this run (included in shardsEarned). */
@@ -58,8 +60,10 @@ export function applyVictory(
   const base = shardsFor({ stars: run.stars, momentum: run.momentum, firstClear });
 
   const bestTimes = { ...(existing.bestTimes ?? {}) };
+  let newCharacterBest = false;
   if (run.characterId) {
     const prev = bestTimes[run.characterId];
+    newCharacterBest = prev === undefined || run.timeSec < prev;
     bestTimes[run.characterId] = prev === undefined ? run.timeSec : Math.min(prev, run.timeSec);
   }
 
@@ -94,6 +98,7 @@ export function applyVictory(
       shardsEarned,
       isNewBestTime: existing.bestTime === null || run.timeSec < existing.bestTime,
       newBestStars: run.stars > existing.stars,
+      newCharacterBest,
       ghostBonus,
       milestones,
       masteryBonus,

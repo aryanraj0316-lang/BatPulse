@@ -30,9 +30,15 @@ interface Props {
   onNext: () => void;
   onRetry: () => void;
   onHome: () => void;
+  /** Optional rewarded ad: shown only when an offer exists. Never required to continue. */
+  adOffer?: { reward: number } | null;
+  adBusy?: boolean;
+  /** Shards just received from the ad (shows a thank-you instead of the button). */
+  adGranted?: number | null;
+  onWatchAd?: () => void;
 }
 
-export const ResultCard: React.FC<Props> = ({ visible, levelNumber, levelTitle, result, hasNext, onNext, onRetry, onHome }) => (
+export const ResultCard: React.FC<Props> = ({ visible, levelNumber, levelTitle, result, hasNext, onNext, onRetry, onHome, adOffer, adBusy, adGranted, onWatchAd }) => (
   <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
     <View style={styles.overlay}>
       <View style={styles.card}>
@@ -70,6 +76,17 @@ export const ResultCard: React.FC<Props> = ({ visible, levelNumber, levelTitle, 
           <View style={styles.divider} />
           <Row label="ECHO SHARDS" value={`+${result.shardsEarned} ✦`} color={PALETTE.shardGold} big testID="result-shards" />
         </View>
+
+        {adOffer && !adGranted && (
+          <TouchableOpacity style={styles.adBtn} onPress={onWatchAd} disabled={adBusy} activeOpacity={0.8} testID="btn-watch-ad">
+            <Text style={styles.adText}>{adBusy ? 'LOADING…' : `▶ WATCH AN AD · +${adOffer.reward} ✦`}</Text>
+          </TouchableOpacity>
+        )}
+        {!!adGranted && (
+          <Text style={styles.adThanks} testID="ad-thanks">
+            +{adGranted} ✦ added. Thank you!
+          </Text>
+        )}
 
         <View style={styles.buttons}>
           {hasNext && (
@@ -130,6 +147,9 @@ const styles = StyleSheet.create({
   buttons: { width: '100%', marginTop: 18, gap: 10 },
   primary: { backgroundColor: PALETTE.sonarCyan, borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
   primaryText: { color: '#001018', fontWeight: '900', fontSize: 14, letterSpacing: 2 },
+  adBtn: { marginBottom: 10, paddingVertical: 11, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: PALETTE.shardGold },
+  adText: { color: PALETTE.shardGold, fontWeight: '900', fontSize: 11, letterSpacing: 1.5 },
+  adThanks: { color: PALETTE.shardGold, fontSize: 11, textAlign: 'center', marginBottom: 10 },
   secondaryRow: { flexDirection: 'row', gap: 10 },
   secondary: {
     flex: 1,

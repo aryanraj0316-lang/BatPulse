@@ -132,10 +132,44 @@ export const ECHO_CONFIG = {
     bat_phantom: { name: 'Phantom', tagline: 'The whisperer: hunters hear its pulses at half range', price: 6000, glowBonusSec: 0, radiusMult: 1, hearingMult: 0.5, momentumRateMult: 1, momentumCap: 2.0 },
     bat_turbo: { name: 'Turbo Moth', tagline: 'Momentum builds twice as fast, up to x4.0', price: 10000, glowBonusSec: 0, radiusMult: 1, hearingMult: 1, momentumRateMult: 2, momentumCap: 4.0 },
   } as Record<string, CharacterStats>,
+  /**
+   * Online features. Every one is OFF until a real backend exists and its address is filled in:
+   * the game is fully playable offline and never shows a broken online screen.
+   */
+  online: {
+    cloudSave: { enabled: false, baseUrl: '', timeoutMs: 8000, minIntervalSec: 60 },
+    leaderboard: { enabled: false, baseUrl: '', timeoutMs: 8000, topCount: 10 },
+    /** Rewarded ads: optional, never required, off until an ad SDK is integrated and enabled here. */
+    ads: { enabled: false, rewardShards: 50, maxPerDay: 5 },
+  },
+  audio: {
+    /**
+     * Cave reverb. expo-audio has no effect chain, so the echo is a few quieter, delayed repeats of the ping.
+     * Bigger caves (level area / referenceArea) give a longer, wider tail.
+     */
+    reverb: {
+      taps: 3,
+      firstDelaySec: 0.14,
+      spacingSec: 0.11,
+      gain: 0.38, // first repeat, relative to the dry ping
+      decay: 0.55, // each further repeat
+      referenceArea: 400 * 800, // a level of this area has scale 1
+      minScale: 0.7,
+      maxScale: 1.8,
+    },
+  },
   perf: {
     targetFps: 60,
     minAcceptableFps: 50, // low-end device floor
     frameBudgetMs: 1000 / 60,
+    /** Graphics 'auto': drop to low quality when frames run long (and stay there for the session). */
+    autoQuality: {
+      warmupFrames: 60, // level start hitches are ignored
+      windowFrames: 120, // 2 s at 60 FPS
+      downgradeFrameMs: 22, // average slower than this (about 45 FPS) triggers the downgrade
+      ignoreFrameMs: 150, // a single frame this long is a pause/background, not slowness
+    },
+    cullMarginWorld: 80, // lit things this far outside the screen are still drawn (no pop-in)
   },
   level: {
     loadBudgetMs: 1000,

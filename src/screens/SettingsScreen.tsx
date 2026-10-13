@@ -4,6 +4,9 @@ import { PALETTE } from '../constants/palette';
 import { useSettingsStore } from '../state/settingsStore';
 import { Slider } from '../components/Slider';
 import { audio } from '../audio';
+import { GRAPHICS_SETTINGS } from '../render/quality';
+import { cloudSync } from '../cloud';
+import { syncStatusText } from '../cloud/CloudSync';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -61,6 +64,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
           <Text style={styles.sublabel}>Scales how brightly pulses light up the world.</Text>
         </View>
 
+        <CloudSaveSection />
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>FEEDBACK & CONTROLS</Text>
           <View style={styles.settingRow}>
@@ -78,6 +83,32 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
           </View>
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Cave echo</Text>
+              <Text style={styles.sublabel}>Your pulse echoes through the cave (off = dry ping)</Text>
+            </View>
+            <Switch
+              testID="switch-reverb"
+              value={st.reverb}
+              onValueChange={st.setReverb}
+              trackColor={{ false: '#334155', true: PALETTE.sonarCyan }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Graphics</Text>
+              <Text style={styles.sublabel}>Auto lowers detail by itself if the game runs slowly</Text>
+            </View>
+            <TouchableOpacity
+              testID="btn-graphics"
+              onPress={() => st.setGraphics(GRAPHICS_SETTINGS[(GRAPHICS_SETTINGS.indexOf(st.graphics) + 1) % GRAPHICS_SETTINGS.length])}
+              style={styles.cycleBtn}
+            >
+              <Text style={styles.cycleText}>{st.graphics.toUpperCase()}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.settingRow}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.label}>Floating joystick</Text>
               <Text style={styles.sublabel}>Appears where your thumb lands (off = fixed bottom-right)</Text>
             </View>
@@ -91,6 +122,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
           </View>
         </View>
       </ScrollView>
+    </View>
+  );
+};
+
+/** Cloud save status and a manual sync button. Hidden-by-text when the build has no backend. */
+const CloudSaveSection: React.FC = () => {
+  const [, bump] = React.useReducer((n: number) => n + 1, 0);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => cloudSync.subscribe(bump), []);
+  const sync = async () => {
+    setBusy(true);
+    await cloudSync.request('manual');
+    setBusy(false);
+  };
+  return (
+    <View style={styles.section} testID="cloud-section">
+      <Text style={styles.sectionTitle}>CLOUD SAVE</Text>
+      <Text style={styles.sublabel} testID="cloud-status">
+        {syncStatusText(cloudSync.status, cloudSync.enabled)}
+      </Text>
+      {cloudSync.enabled && (
+        <TouchableOpacity style={styles.cycleBtn} onPress={sync} disabled={busy} testID="btn-cloud-sync">
+          <Text style={styles.cycleText}>{busy ? 'SYNCING…' : 'SYNC NOW'}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -155,6 +211,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 14,
   },
+  cycleBtn: { minWidth: 64, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: PALETTE.sonarCyan },
+  cycleText: { color: PALETTE.sonarCyan, fontWeight: '900', fontSize: 11, letterSpacing: 1.5 },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

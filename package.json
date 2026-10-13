@@ -14,7 +14,8 @@
     "e2e:phase2": "node tools/e2e/phase2.js",
     "e2e:phase3": "node tools/e2e/phase3.js",
     "e2e:phase4": "node tools/e2e/phase4.js",
-    "e2e:phase5": "node tools/e2e/phase5.js"
+    "e2e:phase5": "node tools/e2e/phase5.js",
+    "e2e:phase6": "node tools/e2e/phase6.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",

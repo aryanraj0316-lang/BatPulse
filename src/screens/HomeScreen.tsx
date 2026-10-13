@@ -9,12 +9,14 @@ import { DEV_KEYS } from '../constants/gameConfig';
 import { audio } from '../audio';
 import { authoredLevelIds } from '../levels/loader';
 import { DailyRewardCard } from '../components/DailyRewardCard';
+import appConfig from '../../app.json';
 
 interface HomeScreenProps {
   onPlay: (levelId: number) => void;
   onLevelSelect: () => void;
   onSettings: () => void;
   onShop: () => void;
+  onLeaderboard: () => void;
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -24,6 +26,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onLevelSelect,
   onSettings,
   onShop,
+  onLeaderboard,
 }) => {
   const { records, shards } = useProgressStore();
 
@@ -140,6 +143,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <Text style={styles.menuButtonText}>✦ BAT SHOP</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuButton} onPress={onLeaderboard} activeOpacity={0.7} testID="btn-leaderboard">
+          <Text style={styles.menuButtonText}>♛ LEADERBOARDS</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuButton} onPress={onSettings} activeOpacity={0.7}>
           <Text style={styles.menuButtonText}>⚙ SETTINGS & CALIBRATION</Text>
         </TouchableOpacity>
@@ -148,7 +155,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* Version Tag */}
       <TouchableOpacity style={styles.footer} onPress={handleVersionTap} activeOpacity={0.9}>
         <Text style={styles.versionText}>
-          ECHOLOCATION · BUILD 1.0.0 {DEBUG_ENABLED ? '· DEBUG' : ''}
+          ECHOLOCATION · BUILD {appConfig.expo.version} {DEBUG_ENABLED ? '· DEBUG' : ''}
         </Text>
       </TouchableOpacity>
 

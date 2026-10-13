@@ -30,10 +30,13 @@ LOUD_SEARCH=44 npx jest --testMatch "**/loudSearch.tool.ts"   # search a loud so
 | `src/audio/` | Audio service (volume, pooling, pause) + expo-audio backend |
 | `src/input/` | Multi-touch joystick / SONAR handling |
 | `src/render/`, `src/screens/`, `src/components/` | UI and drawing (everything drawn comes from the registry) |
-| `src/save/` | Versioned save, identical backup copy, corruption recovery |
+| `src/save/` | Versioned save (v3), identical backup copy, corruption recovery, shard ledger |
+| `src/cloud/`, `src/leaderboard/`, `src/ads/` | Cloud-save merge and sync, per-bat leaderboards, optional rewarded ads. All behind flags that are **off** until a backend exists |
+| `src/diagnostics/` | Crash recording and the recovery screen's error handling |
+| `src/game/feedback.ts` | The one table that maps gameplay events to sounds and vibrations |
 | `src/analytics/`, `src/debug/` | Event hooks; debug-only tools (dev builds) |
 | `tools/` | Level build tool and the browser end-to-end harness |
-| `docs/` | `TEST_DEVICES.md` (tiers, budget), `LEVEL_SOLUTIONS.md` (generated) |
+| `docs/` | `TEST_DEVICES.md` (tiers, budget), `LEVEL_SOLUTIONS.md` (generated), `ECONOMY.md`, `ONLINE_BACKEND.md` (server contract), `ART_INTEGRATION.md` (final art/audio specs), `RELEASE_CHECKLIST.md` (beta and release) |
 
 ## Adding a level
 
@@ -43,10 +46,16 @@ descriptive error in debug builds and are skipped in release builds.
 
 ## Replacing placeholder art / sound
 
-`AssetRegistry.registerVisual(key, Component)` / `registerSound(key, source)` with the same key. No other code changes.
+Add one line per asset to `src/assets/finalAssets.ts`; anything not listed keeps its placeholder. Specs for every key: `docs/ART_INTEGRATION.md`.
 
-## Android on a network that re-signs HTTPS (some antivirus "web shield" products)
+## Android build
+
+`npx expo prebuild --platform android` generates `android/` from `app.json` (permissions, icons, version). Then, from `android/`:
+`./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a`. Release signing and the Play bundle are in `docs/RELEASE_CHECKLIST.md`.
+
+### On a network that re-signs HTTPS (some antivirus "web shield" products)
 
 Gradle's Java cannot verify such certificates. Use the Windows trust store: add
 `systemProp.javax.net.ssl.trustStoreType=WINDOWS-ROOT` (on its own line) and
 `-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT` to `org.gradle.jvmargs` in `android/gradle.properties`.
+Regenerating `android/` removes both lines: add them back.

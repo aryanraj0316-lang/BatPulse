@@ -6,7 +6,7 @@ import { useSettingsStore } from '../state/settingsStore';
 /** App-wide audio. Volumes are read live from settings on every play. */
 export const audio = new AudioService(new ExpoAudioBackend(), () => {
   const s = useSettingsStore.getState();
-  return { sfx: s.sfxVolume, music: s.musicVolume };
+  return { sfx: s.sfxVolume, music: s.musicVolume, reverb: s.reverb };
 });
 
 /** Call once at startup, after assets are registered. */

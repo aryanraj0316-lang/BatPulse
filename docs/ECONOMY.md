@@ -28,6 +28,7 @@ hunters. That is a deliberate trade-off (see/hear more vs. be heard more), not a
 | Ghost Run (hunter levels only) | +25, once per level |
 | Chapter mastery | +20 at 25 %, +30 at 50 %, +50 at 75 %, +100 at 100 % of the chapter's stars (once each) |
 | Daily login | 50 on day 1, ramping to 100 on day 7, plus a +100 streak bonus on day 7 |
+| Rewarded ad (optional, off by default) | +50, once per result screen, at most 5 a day, only when the ad was watched to the end |
 
 Daily reward uses **trusted network time** (UTC day boundaries), never the phone clock. Offline it shows
 "Connect to the internet to claim" and stays claimable. Missing a day restarts the streak at day 1.
@@ -43,6 +44,13 @@ Daily reward uses **trusted network time** (UTC day boundaries), never the phone
 
 A perfect first run buys Vesper or Sonar-Bot, not both. Phantom and Turbo Moth need replays, the daily reward
 and momentum. This is intentional so the shop stays a long-term goal; the prices are the spec's.
+
+## How the balance is kept (save v3)
+
+The balance is **derived**: `shards = (shards earned on every device) - (price of every bat owned)`. Each device only ever
+adds to its own earned counter (`src/save/ledger.ts`), which is what lets two devices' saves merge with no lost earnings and
+no shards spent twice. Buying a bat therefore never edits a number: owning the bat is the payment. Old saves are converted so
+that the balance they showed is unchanged.
 
 ## Data kept per player
 

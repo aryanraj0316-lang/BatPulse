@@ -3,6 +3,7 @@ import { debugTimeScale, getDebugFlags } from '../debug/debugFlags';
 import { GameSim } from '../sim/game';
 import { TouchInput } from '../input/TouchInput';
 import { FrameBus } from './frameBus';
+import { Quality, QualityGovernor } from '../render/quality';
 
 interface Options {
   sim: GameSim;
@@ -11,6 +12,9 @@ interface Options {
   paused: boolean;
   /** Called about twice a second with the measured frame rate (debug FPS counter). */
   onFps?: (fps: number) => void;
+  /** Watches frame times; `onQuality` fires once when it decides to drop to low quality. */
+  governor?: QualityGovernor;
+  onQuality?: (q: Quality) => void;
 }
 
 /**
@@ -18,11 +22,13 @@ interface Options {
  * While paused the sim is not stepped (so every timer freezes) and the clock is re-based on resume,
  * so there is never a catch-up jump.
  */
-export function useGameLoop({ sim, input, bus, paused, onFps }: Options): void {
+export function useGameLoop({ sim, input, bus, paused, onFps, governor, onQuality }: Options): void {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const fpsCb = useRef(onFps);
   fpsCb.current = onFps;
+  const qualityCb = useRef(onQuality);
+  qualityCb.current = onQuality;
 
   useEffect(() => {
     let raf = 0;
@@ -42,8 +48,11 @@ export function useGameLoop({ sim, input, bus, paused, onFps }: Options): void {
         frames = 0;
         return;
       }
-      const dt = ((t - last) / 1000) * debugTimeScale(getDebugFlags());
+      const frameMs = t - last;
+      const dt = (frameMs / 1000) * debugTimeScale(getDebugFlags());
       last = t;
+      const dropped = governor?.sample(frameMs);
+      if (dropped) qualityCb.current?.(dropped);
       sim.setInput(input.stick.x, input.stick.y);
       sim.step(dt);
       bus.emit();
@@ -57,5 +66,5 @@ export function useGameLoop({ sim, input, bus, paused, onFps }: Options): void {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [sim, input, bus]);
+  }, [sim, input, bus, governor]);
 }

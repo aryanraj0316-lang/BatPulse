@@ -49,7 +49,7 @@ describe('settings slider math and persistence', () => {
   });
   it('all settings survive a save round trip and are clamped when corrupt', () => {
     const s = migrateSave({ settings: { sfxVolume: 0.3, musicVolume: 0.9, brightness: 1.2, hapticsEnabled: false, floatingJoystick: false } });
-    expect(s.settings).toEqual({ sfxVolume: 0.3, musicVolume: 0.9, brightness: 1.2, hapticsEnabled: false, floatingJoystick: false });
+    expect(s.settings).toEqual({ sfxVolume: 0.3, musicVolume: 0.9, brightness: 1.2, hapticsEnabled: false, floatingJoystick: false, reverb: true, graphics: 'auto' });
     const bad = migrateSave({ settings: { sfxVolume: 'loud', brightness: 100, hapticsEnabled: 'yes' } });
     expect(bad.settings.sfxVolume).toBe(0.8);
     expect(bad.settings.brightness).toBe(1.5);

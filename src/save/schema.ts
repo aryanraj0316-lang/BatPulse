@@ -1,6 +1,8 @@
-import { LevelRecord } from '../types/game';
+import { LevelRecord, ScoreSubmission } from '../types/game';
+import { GRAPHICS_SETTINGS, GraphicsSetting } from '../render/quality';
+import { balanceOf, emptyLedger, Ledger, ledgerFromBalance, normalizeLedger } from './ledger';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface SettingsSave {
   sfxVolume: number; // 0..1
@@ -8,11 +10,19 @@ export interface SettingsSave {
   brightness: number; // 0.5..1.5, multiplies reveal glow
   hapticsEnabled: boolean;
   floatingJoystick: boolean;
+  /** Cave echo on pulses. */
+  reverb: boolean;
+  graphics: GraphicsSetting;
 }
 
 export interface SaveData {
   saveVersion: number;
+  /** Spendable balance. Derived from `ledger` and the owned bats; kept here so the file is readable. */
   shards: number;
+  /** Shards earned per device: what makes saves from two devices mergeable (see ledger.ts). */
+  ledger: Ledger;
+  /** When this save last changed (ms since epoch). The newer save wins for settings and the equipped bat. */
+  updatedAt: number;
   selectedCharacter: string;
   unlockedCharacters: string[];
   /** Per-level progress, keyed by level id. */
@@ -20,6 +30,10 @@ export interface SaveData {
   hasSeenHeadphonePrompt: boolean;
   /** Chapter mastery bonuses already paid, as "chapter:percent" (e.g. "1:50"). */
   claimedMilestones: string[];
+  /** Best times not yet sent to the leaderboard (at most one per board). */
+  scoreQueue: ScoreSubmission[];
+  /** Rewarded ads watched today (soft daily cap). */
+  ads: { day: number | null; count: number };
   settings: SettingsSave;
   daily: { lastClaimDay: number | null; streak: number };
 }
@@ -27,6 +41,8 @@ export interface SaveData {
 export const defaultSave = (): SaveData => ({
   saveVersion: SAVE_VERSION,
   shards: 0,
+  ledger: emptyLedger(),
+  updatedAt: 0,
   selectedCharacter: 'bat_rookie',
   unlockedCharacters: ['bat_rookie'],
   records: {
@@ -34,7 +50,9 @@ export const defaultSave = (): SaveData => ({
   },
   hasSeenHeadphonePrompt: false,
   claimedMilestones: [],
-  settings: { sfxVolume: 0.8, musicVolume: 0.5, brightness: 1, hapticsEnabled: true, floatingJoystick: true },
+  scoreQueue: [],
+  ads: { day: null, count: 0 },
+  settings: { sfxVolume: 0.8, musicVolume: 0.5, brightness: 1, hapticsEnabled: true, floatingJoystick: true, reverb: true, graphics: 'auto' },
   daily: { lastClaimDay: null, streak: 0 },
 });
 
@@ -51,6 +69,19 @@ function normalizeBestTimes(v: unknown): Record<string, number> | undefined {
   const out: Record<string, number> = {};
   for (const [k, t] of Object.entries(v)) if (typeof t === 'number' && Number.isFinite(t) && t > 0) out[k] = t;
   return Object.keys(out).length ? out : undefined;
+}
+
+function normalizeScoreQueue(v: unknown): ScoreSubmission[] {
+  if (!Array.isArray(v)) return [];
+  const best = new Map<string, ScoreSubmission>();
+  for (const e of v) {
+    if (!isObj(e) || !Number.isInteger(e.levelId) || e.levelId <= 0 || typeof e.character !== 'string') continue;
+    if (typeof e.timeSec !== 'number' || !Number.isFinite(e.timeSec) || e.timeSec <= 0) continue;
+    const key = `${e.levelId}:${e.character}`;
+    const prev = best.get(key);
+    if (!prev || e.timeSec < prev.timeSec) best.set(key, { levelId: e.levelId, character: e.character, timeSec: e.timeSec });
+  }
+  return [...best.values()].slice(-50);
 }
 
 function normalizeRecords(v: unknown, fb: SaveData['records']): SaveData['records'] {
@@ -89,14 +120,20 @@ export function migrateSave(raw: unknown): SaveData {
     typeof raw.selectedCharacter === 'string' && unlockedCharacters.includes(raw.selectedCharacter)
       ? raw.selectedCharacter
       : 'bat_rookie';
+  // saves before v3 only knew a balance: everything earned = balance + what was bought
+  const ledger = normalizeLedger(raw.ledger) ?? ledgerFromBalance(nonNegInt(raw.shards, d.shards), unlockedCharacters);
   return {
     saveVersion: SAVE_VERSION,
-    shards: nonNegInt(raw.shards, d.shards),
+    shards: balanceOf(ledger, unlockedCharacters),
+    ledger,
+    updatedAt: nonNegInt(raw.updatedAt, 0),
     selectedCharacter: selected,
     unlockedCharacters,
     records: normalizeRecords(raw.records, d.records),
     hasSeenHeadphonePrompt: bool(raw.hasSeenHeadphonePrompt, false),
     claimedMilestones: Array.isArray(raw.claimedMilestones) ? [...new Set(raw.claimedMilestones.filter((x: unknown): x is string => typeof x === 'string'))] : [],
+    scoreQueue: normalizeScoreQueue(raw.scoreQueue),
+    ads: { day: isObj(raw.ads) && typeof raw.ads.day === 'number' && Number.isFinite(raw.ads.day) ? Math.floor(raw.ads.day) : null, count: isObj(raw.ads) ? nonNegInt(raw.ads.count, 0) : 0 },
     settings: {
       // legacy builds stored a single on/off switch: off maps to zero volume
       sfxVolume: clamp01(settings.sfxVolume, settings.soundEnabled === false ? 0 : d.settings.sfxVolume),
@@ -104,6 +141,8 @@ export function migrateSave(raw: unknown): SaveData {
       brightness: clamp01(settings.brightness, d.settings.brightness, 0.5, 1.5),
       hapticsEnabled: bool(settings.hapticsEnabled, d.settings.hapticsEnabled),
       floatingJoystick: bool(settings.floatingJoystick, d.settings.floatingJoystick),
+      reverb: bool(settings.reverb, d.settings.reverb),
+      graphics: GRAPHICS_SETTINGS.includes(settings.graphics as GraphicsSetting) ? (settings.graphics as GraphicsSetting) : d.settings.graphics,
     },
     daily: {
       lastClaimDay: typeof daily.lastClaimDay === 'number' ? daily.lastClaimDay : null,

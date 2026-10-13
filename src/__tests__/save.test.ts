@@ -1,6 +1,14 @@
 import { MemoryStorage } from '../save/storage';
 import { SAVE_KEYS, SaveManager, checksum, decodeEnvelope, encodeEnvelope } from '../save/SaveManager';
-import { SAVE_VERSION, defaultSave, migrateSave } from '../save/schema';
+import { SAVE_VERSION, SaveData, defaultSave, migrateSave } from '../save/schema';
+
+/** Shards are earnings minus purchases (see ledger.ts), so tests set a balance by setting this device's earnings. */
+const setShards = (d: SaveData, n: number) => {
+  d.ledger = { deviceId: d.ledger.deviceId, earned: { [d.ledger.deviceId]: n } };
+  d.shards = n;
+};
+/** A loaded save has this install's random device id; everything else is the plain default. */
+const withoutId = (d: SaveData): SaveData => ({ ...d, ledger: defaultSave().ledger, updatedAt: 0 });
 
 const fresh = async (storage = new MemoryStorage()) => {
   const m = new SaveManager(storage);
@@ -13,13 +21,13 @@ describe('save: basics', () => {
     const { m, r } = await fresh();
     expect(r.source).toBe('default');
     expect(r.recovered).toBe(false);
-    expect(m.data).toEqual(defaultSave());
+    expect(withoutId(m.data)).toEqual(defaultSave());
   });
 
   it('round-trips data through storage', async () => {
     const { m, storage } = await fresh();
     m.mutate((d) => {
-      d.shards = 321;
+      setShards(d, 321);
       d.selectedCharacter = 'bat_rookie';
       d.records[3] = { levelId: 3, unlocked: true, completed: true, stars: 2, bestTime: 12.5, bestMomentum: 1.3, ghostRun: false };
     });
@@ -35,14 +43,14 @@ describe('save: basics', () => {
   it('mutate before load is ignored, not fatal', () => {
     const m = new SaveManager(new MemoryStorage());
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    m.mutate((d) => (d.shards = 9));
+    m.mutate((d) => (setShards(d, 9)));
     expect(m.data.shards).toBe(0);
     warn.mockRestore();
   });
 
   it('many rapid mutations all land in order (no lost shards)', async () => {
     const { m, storage } = await fresh();
-    for (let i = 1; i <= 100; i++) m.mutate((d) => (d.shards += 1));
+    for (let i = 1; i <= 100; i++) m.mutate((d) => (setShards(d, d.shards + 1)));
     await m.flush();
     const m2 = new SaveManager(storage);
     await m2.load();
@@ -53,8 +61,8 @@ describe('save: basics', () => {
 describe('save: corruption recovery', () => {
   const populate = async () => {
     const { m, storage } = await fresh();
-    m.mutate((d) => (d.shards = 100));
-    m.mutate((d) => (d.shards = 250));
+    m.mutate((d) => (setShards(d, 100)));
+    m.mutate((d) => (setShards(d, 250)));
     await m.flush();
     return storage;
   };
@@ -90,7 +98,7 @@ describe('save: corruption recovery', () => {
     const r = await m.load();
     expect(r.source).toBe('default');
     expect(r.recovered).toBe(true);
-    expect(m.data).toEqual(defaultSave());
+    expect(withoutId(m.data)).toEqual(defaultSave());
     expect(storage.map.get(SAVE_KEYS.corrupt)).toBe('{{{not json');
   });
 
@@ -99,7 +107,7 @@ describe('save: corruption recovery', () => {
     expect(storage.map.get(SAVE_KEYS.backup)).toBe(storage.map.get(SAVE_KEYS.primary));
     const m = new SaveManager(storage);
     await m.load();
-    m.mutate((d) => (d.shards += 5));
+    m.mutate((d) => (setShards(d, d.shards + 5)));
     await m.flush();
     expect(storage.map.get(SAVE_KEYS.backup)).toBe(storage.map.get(SAVE_KEYS.primary));
     expect(decodeEnvelope(storage.map.get(SAVE_KEYS.backup)!)!.data.shards).toBe(255);
@@ -110,7 +118,7 @@ describe('save: corruption recovery', () => {
     const m = new SaveManager(storage);
     const r = await m.load();
     expect(r.source).toBe('primary');
-    m.mutate((d) => (d.shards += 1));
+    m.mutate((d) => (setShards(d, d.shards + 1)));
     await m.flush();
     expect(decodeEnvelope(storage.map.get(SAVE_KEYS.backup)!)!.data.shards).toBe(251);
   });
@@ -127,8 +135,8 @@ describe('save: corruption recovery', () => {
     };
     const m = new SaveManager(bad);
     const r = await m.load();
-    expect(r.data).toEqual(defaultSave());
-    m.mutate((d) => (d.shards = 5));
+    expect(withoutId(r.data)).toEqual(defaultSave());
+    m.mutate((d) => (setShards(d, 5)));
     await expect(m.flush()).resolves.toBeUndefined();
     expect(m.data.shards).toBe(5); // still usable in memory
   });
@@ -143,10 +151,10 @@ describe('save: corruption recovery', () => {
       if (fail) throw new Error('transient');
       return realSet(k, v);
     };
-    m.mutate((d) => (d.shards = 10));
+    m.mutate((d) => (setShards(d, 10)));
     await m.flush();
     fail = false;
-    m.mutate((d) => (d.shards += 5));
+    m.mutate((d) => (setShards(d, d.shards + 5)));
     await m.flush();
     const m2 = new SaveManager(storage);
     await m2.load();
@@ -160,7 +168,7 @@ describe('save: corruption recovery', () => {
     storage.map.set(SAVE_KEYS.primary, blob);
     const m = new SaveManager(storage);
     await m.load();
-    m.mutate((d) => (d.shards = 1));
+    m.mutate((d) => (setShards(d, 1)));
     await m.flush();
     expect(storage.map.get(SAVE_KEYS.primary)).toBe(blob);
   });

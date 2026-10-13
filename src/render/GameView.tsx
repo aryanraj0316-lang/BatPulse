@@ -4,6 +4,7 @@ import { AssetRegistry } from '../assets/AssetRegistry';
 import { VisualKey } from '../assets/keys';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { GameSim } from '../sim/game';
+import { isRowVisible, Lod, lodFor } from './quality';
 
 interface Props {
   sim: GameSim;
@@ -20,12 +21,14 @@ interface Props {
   /** Screen-shake offset in screen px. */
   shakeX: number;
   shakeY: number;
+  /** Level of detail (defaults to full). */
+  lod?: Lod;
 }
 
 const WALL_KEY = { normal: 'wall_normal', crystal: 'wall_crystal', mossy: 'wall_mossy' } as const;
 
 /** Glow is quantised so an item only re-renders when its brightness visibly changes. */
-const q = (v: number) => Math.round(v * 16) / 16;
+const quantise = (v: number, steps: number) => Math.round(v * steps) / steps;
 
 interface PieceProps {
   visual: VisualKey;
@@ -50,7 +53,7 @@ Piece.displayName = 'Piece';
  * Draws one frame of a GameSim. Everything is a registry visual, so final art replaces the
  * placeholders without touching this file. Only lit items and live waves are rendered.
  */
-export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offsetX, offsetY, batKey, brightness, time, shakeX, shakeY }) => {
+export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offsetX, offsetY, batKey, brightness, time, shakeX, shakeY, lod = lodFor('high') }) => {
   const Bat = AssetRegistry.getVisual(batKey);
   const Pulse = AssetRegistry.getVisual('pulse_wave');
   const items = sim.world.revealables;
@@ -60,17 +63,21 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
   const dead = sim.status === 'dying';
   const deathProgress = dead ? Math.min(1, 1 - sim.shake / ECHO_CONFIG.death.shakeSec) : 0;
   const pieces: React.ReactNode[] = [];
+  // visible world rows (tall levels scroll): lit things outside them are not drawn
+  const viewTop = -offsetY / scale;
+  const viewBottom = (screenH - offsetY) / scale;
   const hazards = sim.world.hazards;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    let g = q(glow[i] * brightness);
+    if (!isRowVisible(it.y, it.height, viewTop, viewBottom)) continue;
+    let g = quantise(glow[i] * brightness, lod.glowSteps);
     const ref = it.ref ?? 0;
     // state that must stay readable even when nothing is lit: an open door and its countdown
     const doorOpen = it.kind === 'door' && sim.isDoorOpen(ref);
     const switchLit = it.kind === 'switch' && sim.isSwitchLit(ref);
     if (doorOpen) g = Math.max(g, 0.85);
     if (switchLit) g = Math.max(g, 0.7);
-    if (g <= 0.02) continue;
+    if (g <= lod.minGlow) continue;
 
     switch (it.kind) {
       case 'wall':
@@ -143,7 +150,7 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
   // faint rings where recent pulses were made: explains why a hunter is coming
   const Marker = AssetRegistry.getVisual('sound_marker');
   const markers: React.ReactNode[] = [];
-  for (let m = 0; m < sim.markerAge.length; m++) {
+  for (let m = 0; lod.showSoundMarkers && m < sim.markerAge.length; m++) {
     const age = sim.markerAge[m];
     if (age >= ECHO_CONFIG.enemy.soundMarkerSec) continue;
     markers.push(<Marker key={`m${m}`} x={sim.markerX[m]} y={sim.markerY[m]} width={56} height={56} progress={age / ECHO_CONFIG.enemy.soundMarkerSec} />);

@@ -7,6 +7,7 @@ import { GameSim } from '../sim/game';
 import { Viewport, viewOffsetY } from '../sim/world';
 import { edgeAlpha } from '../game/jumpGate';
 import { GameView } from './GameView';
+import { Lod } from './quality';
 
 interface Props {
   sim: GameSim;
@@ -16,6 +17,7 @@ interface Props {
   viewport: Viewport;
   batKey: VisualKey;
   brightness: number;
+  lod?: Lod;
 }
 
 const SHAKE_PX = 9;
@@ -24,7 +26,7 @@ const SHAKE_PX = 9;
  * Owns the per-frame redraw: subscribes to the frame bus and re-renders itself (and only itself),
  * so the HUD and menus are not touched 60 times a second.
  */
-export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, screenH, viewport, batKey, brightness }) => {
+export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, screenH, viewport, batKey, brightness, lod }) => {
   const [, redraw] = useReducer((n: number) => (n + 1) | 0, 0);
   useEffect(() => bus.subscribe(redraw), [bus]);
 
@@ -47,6 +49,7 @@ export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, scre
         offsetY={offsetY}
         batKey={batKey}
         brightness={brightness}
+        lod={lod}
         time={t}
         shakeX={shakeX}
         shakeY={shakeY}

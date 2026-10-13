@@ -12,6 +12,7 @@ export type AnalyticsEvent =
   | { name: 'character_unlocked'; characterId: string }
   | { name: 'character_selected'; characterId: string }
   | { name: 'daily_claimed'; day: number; amount: number }
+  | { name: 'crash'; source: string; message: string }
   | { name: 'mastery_milestone'; chapterId: number; pct: number; bonus: number };
 
 export type AnalyticsSink = (event: AnalyticsEvent, timestamp: number) => void;

@@ -22,9 +22,14 @@ async function boot() {
   await mockManager.load();
   useProgressStore.getState().hydrate();
 }
+/** Sets the spendable balance the way the game earns it: through this device's earnings in the ledger. */
 const give = (n: number) => {
-  useProgressStore.setState({ shards: n });
-  mockManager.mutate((d) => (d.shards = n));
+  const ledger = { deviceId: st().ledger.deviceId, earned: { [st().ledger.deviceId]: n } };
+  useProgressStore.setState({ shards: n, ledger });
+  mockManager.mutate((d) => {
+    d.ledger = ledger;
+    d.shards = n;
+  });
 };
 const st = () => useProgressStore.getState();
 

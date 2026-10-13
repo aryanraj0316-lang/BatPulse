@@ -17,6 +17,10 @@ import { DebugOverlay } from '../debug/DebugOverlay';
 import { DEBUG_ENABLED } from '../debug/debugFlags';
 import { FrameBus } from '../game/frameBus';
 import { useGameLoop } from '../game/useGameLoop';
+import { effectiveQuality, lodFor, Quality, sessionGovernor } from '../render/quality';
+import { playFeedback } from '../game/feedback';
+import { leaderboards } from '../leaderboard';
+import { ads } from '../ads';
 import { HapticEngine } from '../haptics/HapticEngine';
 import { TouchInput } from '../input/TouchInput';
 import { hasAuthoredLevel, loadAuthoredLevel } from '../levels/loader';
@@ -82,6 +86,12 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
   const batKey = useProgressStore((s) => s.selectedCharacter) as VisualKey;
   const brightness = useSettingsStore((s) => s.brightness);
   const floating = useSettingsStore((s) => s.floatingJoystick);
+  const graphics = useSettingsStore((s) => s.graphics);
+  // 'auto' watches frame times and drops detail (never gameplay) when the device struggles
+  const governor = sessionGovernor;
+  useEffect(() => governor.restartWindow(), [governor]);
+  const [governed, setGoverned] = useState<Quality>(governor.current);
+  const lod = lodFor(effectiveQuality(graphics, governed));
   const recordVictory = useProgressStore((s) => s.recordVictory);
 
   // fit the level into the area below the HUD
@@ -113,67 +123,34 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
   const [hint, setHint] = useState<string | null>(sim.hints.current);
   const [fps, setFps] = useState(0);
   const [fail, setFail] = useState<{ jump: boolean } | null>(null);
+  // optional rewarded ad on the result card (one per result; the whole feature is off by default)
+  const [adBusy, setAdBusy] = useState(false);
+  const [adGranted, setAdGranted] = useState<number | null>(null);
   const jumpGate = useMemo(() => new JumpGate(), [sim]);
   const [, bumpStick] = useReducer((n: number) => (n + 1) | 0, 0);
 
-  useGameLoop({ sim, input, bus, paused, onFps: setFps });
+  useGameLoop({ sim, input, bus, paused, onFps: setFps, governor: graphics === 'auto' ? governor : undefined, onQuality: setGoverned });
 
   /* ───────────── gameplay events -> sound, haptics, analytics, result ───────────── */
   useEffect(() => {
     sim.onEvent = (e: SimEvent) => {
       const haptics = useSettingsStore.getState().hapticsEnabled;
+      // sound + vibration come from one table (game/feedback.ts); this switch only does analytics and results
+      playFeedback(e, sim.threat, def, {
+        playSound: (key, gain, echoScale) => (echoScale !== undefined ? audio.playWithEcho(key, echoScale, gain) : audio.play(key, gain)),
+        haptic: (kind) => HapticEngine.play(kind, haptics),
+      });
       switch (e) {
         case 'restart':
           Analytics.track({ name: 'level_start', levelId: def.id });
           break;
-        case 'pulse':
-          audio.play('sfx_ping');
-          HapticEngine.ping(haptics);
-          break;
-        case 'no_charge':
-          audio.play('sfx_switch', 0.5);
-          HapticEngine.wallBump(haptics);
-          break;
-        case 'wall_hit':
-          audio.play('sfx_hit', 0.6);
-          HapticEngine.wallBump(haptics);
-          break;
         case 'death':
-          audio.play('sfx_death');
-          HapticEngine.death(haptics);
           Analytics.track({ name: 'level_fail', levelId: def.id, cause: sim.failCause ?? 'spike' });
           Analytics.track({ name: 'pulses_used', levelId: def.id, count: sim.pulsesUsed });
           // being caught by a hunter shows the fail screen (dark jump effect at most once in a while)
           if (sim.failCause === 'enemy') setFail({ jump: jumpGate.tryPlay(Date.now() / 1000) });
           break;
-        case 'enemy_alert':
-          audio.play('sfx_enemy_alert');
-          HapticEngine.wraithAlert(haptics);
-          break;
-        case 'heartbeat':
-          audio.play('sfx_heartbeat', 0.35 + 0.65 * sim.threat); // louder as the hunter gets closer
-          break;
-        case 'switch':
-          audio.play('sfx_switch');
-          HapticEngine.wallBump(haptics);
-          break;
-        case 'checkpoint':
-          audio.play('sfx_switch', 0.9);
-          HapticEngine.shardPickup(haptics);
-          break;
-        case 'door_open':
-          audio.play('sfx_door');
-          break;
-        case 'door_close':
-          audio.play('sfx_door', 0.5);
-          break;
-        case 'pickup':
-          audio.play('sfx_switch', 0.8); // no dedicated pickup sound key: the switch click doubles as the chime
-          HapticEngine.shardPickup(haptics);
-          break;
         case 'finish': {
-          audio.play('sfx_finish');
-          HapticEngine.victory(haptics);
           const timeSec = Math.round(sim.elapsed * 100) / 100;
           const stars = starsForTime(timeSec, def.starThresholds);
           const momentum = sim.momentum.value;
@@ -182,8 +159,10 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
           const ghostRun = sim.isGhostRun;
           const res =
             def.id === 0
-              ? { firstClear: false, shardsEarned: 0, isNewBestTime: false, newBestStars: false, ghostBonus: 0, masteryBonus: 0 }
+              ? { firstClear: false, shardsEarned: 0, isNewBestTime: false, newBestStars: false, newCharacterBest: false, ghostBonus: 0, masteryBonus: 0 }
               : recordVictory(def.id, { timeSec, stars, momentum, bestMomentum, ghostRun });
+          // a personal best with this bat goes to that bat's leaderboard (queued when offline, never blocks the result)
+          if (def.id !== 0 && res.newCharacterBest) void leaderboards.submitBest({ levelId: def.id, character: useProgressStore.getState().selectedCharacter, timeSec });
           if (ghostRun) Analytics.track({ name: 'ghost_run', levelId: def.id });
           Analytics.track({ name: 'level_complete', levelId: def.id, timeSec, stars, pulses: sim.pulsesUsed, momentum: bestMomentum });
           Analytics.track({ name: 'pulses_used', levelId: def.id, count: sim.pulsesUsed });
@@ -288,12 +267,21 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
     input.cancelAll();
     sim.restart();
     setResult(null);
+    setAdGranted(null);
     setFail(null);
     setPaused(false);
     bumpStick();
     setSnap(makeSnapshot(sim));
     setHint(sim.hints.current);
   }, [sim, input]);
+
+  const watchAd = useCallback(async () => {
+    setAdBusy(true);
+    const before = useProgressStore.getState().shards;
+    const outcome = await ads.watch(adGranted !== null);
+    setAdBusy(false);
+    if (outcome === 'rewarded') setAdGranted(useProgressStore.getState().shards - before);
+  }, [adGranted]);
 
   /** "Retry Cleaner": back to the last checkpoint (or the start when none was reached). */
   const retryFromCheckpoint = useCallback(() => {
@@ -326,6 +314,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
         viewport={view}
         batKey={batKey}
         brightness={brightness}
+        lod={lod}
       />
 
       <StickVisual input={input} restX={restX} restY={restY} />
@@ -360,6 +349,13 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
           onNext={() => onNextLevel(nextId)}
           onRetry={restart}
           onHome={onExitToMenu}
+          adOffer={(() => {
+            const o = ads.offer(adGranted !== null);
+            return o.available ? { reward: o.reward } : null;
+          })()}
+          adBusy={adBusy}
+          adGranted={adGranted}
+          onWatchAd={watchAd}
         />
       )}
     </View>

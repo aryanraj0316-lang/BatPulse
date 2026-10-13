@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { saveManager } from '../save';
 import { defaultSave, SettingsSave } from '../save/schema';
+import { GraphicsSetting } from '../render/quality';
 
 interface SettingsState extends SettingsSave {
   setSfxVolume: (v: number) => void;
@@ -8,6 +9,8 @@ interface SettingsState extends SettingsSave {
   setBrightness: (v: number) => void;
   setHapticsEnabled: (val: boolean) => void;
   setFloatingJoystick: (val: boolean) => void;
+  setReverb: (val: boolean) => void;
+  setGraphics: (val: GraphicsSetting) => void;
   /** Replaces in-memory state with the loaded save. Call once after saveManager.load(). */
   hydrate: () => void;
 }
@@ -22,6 +25,8 @@ const persist = (s: SettingsSave) => {
       brightness: s.brightness,
       hapticsEnabled: s.hapticsEnabled,
       floatingJoystick: s.floatingJoystick,
+      reverb: s.reverb,
+      graphics: s.graphics,
     };
   });
 };
@@ -40,5 +45,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     setBrightness: (v) => update({ brightness: clamp(v, 0.5, 1.5) }),
     setHapticsEnabled: (val) => update({ hapticsEnabled: val }),
     setFloatingJoystick: (val) => update({ floatingJoystick: val }),
+    setReverb: (val) => update({ reverb: val }),
+    setGraphics: (val) => update({ graphics: val }),
   };
 });
