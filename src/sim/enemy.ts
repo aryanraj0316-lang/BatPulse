@@ -159,12 +159,15 @@ export class EnemySystem {
     this.reset();
   }
 
-  /** Back to the spawn situation (every attempt starts identically). */
-  reset(): void {
-    this.alertCount = 0;
+  /**
+   * Back to the situation at world time `t` (0 = the spawn): every hunter on patrol where the loop puts it then.
+   * `keepAlerts` is true on a checkpoint respawn: being alerted before a death still counts for the run.
+   */
+  reset(t: number = 0, keepAlerts: boolean = false): void {
+    if (!keepAlerts) this.alertCount = 0;
     this.nearest = Infinity;
     for (const e of this.enemies) {
-      const info = patrolInfo(e.def, 0, e.patrolSpeed, this.scratch);
+      const info = patrolInfo(e.def, t, e.patrolSpeed, this.scratch);
       e.body.x = info.x;
       e.body.y = info.y;
       e.body.vx = 0;

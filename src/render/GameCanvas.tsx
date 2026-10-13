@@ -4,6 +4,7 @@ import { VisualKey } from '../assets/keys';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { FrameBus } from '../game/frameBus';
 import { GameSim } from '../sim/game';
+import { Viewport, viewOffsetY } from '../sim/world';
 import { edgeAlpha } from '../game/jumpGate';
 import { GameView } from './GameView';
 
@@ -12,9 +13,7 @@ interface Props {
   bus: FrameBus;
   screenW: number;
   screenH: number;
-  scale: number;
-  offsetX: number;
-  offsetY: number;
+  viewport: Viewport;
   batKey: VisualKey;
   brightness: number;
 }
@@ -25,11 +24,13 @@ const SHAKE_PX = 9;
  * Owns the per-frame redraw: subscribes to the frame bus and re-renders itself (and only itself),
  * so the HUD and menus are not touched 60 times a second.
  */
-export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, screenH, scale, offsetX, offsetY, batKey, brightness }) => {
+export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, screenH, viewport, batKey, brightness }) => {
   const [, redraw] = useReducer((n: number) => (n + 1) | 0, 0);
   useEffect(() => bus.subscribe(redraw), [bus]);
 
   const t = Date.now() / 1000;
+  // tall levels scroll: the camera follows the bat
+  const offsetY = viewOffsetY(viewport, sim.body.y);
   // decaying jitter while the death shake runs
   const k = sim.shake > 0 ? sim.shake / ECHO_CONFIG.death.shakeSec : 0;
   const shakeX = k * SHAKE_PX * Math.sin(t * 90);
@@ -41,8 +42,8 @@ export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, scre
         sim={sim}
         screenW={screenW}
         screenH={screenH}
-        scale={scale}
-        offsetX={offsetX}
+        scale={viewport.scale}
+        offsetX={viewport.offsetX}
         offsetY={offsetY}
         batKey={batKey}
         brightness={brightness}
@@ -54,7 +55,7 @@ export const GameCanvas: React.FC<Props> = React.memo(({ sim, bus, screenW, scre
       {sim.threat > 0 && (
         <View
           testID="threat-edge"
-          style={[StyleSheet.absoluteFill, { borderWidth: 10 + 22 * sim.threat, borderColor: '#FF1F3D', opacity: edgeAlpha(sim.threat, sim.beatAge) }]}
+          style={[StyleSheet.absoluteFill, { borderWidth: 6 + 12 * sim.threat, borderColor: '#FF1F3D', opacity: edgeAlpha(sim.threat, sim.beatAge) }]}
         />
       )}
     </View>

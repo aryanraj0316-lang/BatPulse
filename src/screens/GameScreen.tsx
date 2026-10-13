@@ -24,7 +24,7 @@ import { LevelDef } from '../levels/schema';
 import { GameCanvas } from '../render/GameCanvas';
 import { GameSim, SimEvent } from '../sim/game';
 import { scoreFor, starsForTime } from '../sim/scoring';
-import { buildWorld, fitView, pulseRadiusWorld } from '../sim/world';
+import { buildWorld, fitViewport, pulseRadiusWorld } from '../sim/world';
 import { useProgressStore } from '../state/progressStore';
 import { useSettingsStore } from '../state/settingsStore';
 
@@ -86,10 +86,10 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
   const character = ECHO_CONFIG.characters[batKey] ?? ECHO_CONFIG.characters.bat_rookie;
 
   // fit the level into the area below the HUD
+  // (levels taller than the screen are scaled to the width and the camera follows the bat)
   const view = useMemo(() => {
     const top = insets.top + HUD_HEIGHT;
-    const v = fitView(SW, Math.max(100, SH - top - insets.bottom), def.width, def.height);
-    return { ...v, offsetY: v.offsetY + top };
+    return fitViewport(SW, top, Math.max(100, SH - top - insets.bottom), def.width, def.height);
   }, [SW, SH, insets.top, insets.bottom, def.width, def.height]);
   const pulseRadius = pulseRadiusWorld(SW, view.scale, ECHO_CONFIG.sonar.maxRadiusScreenFraction, character.radiusMult);
 
@@ -161,6 +161,10 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
         case 'switch':
           audio.play('sfx_switch');
           HapticEngine.wallBump(haptics);
+          break;
+        case 'checkpoint':
+          audio.play('sfx_switch', 0.9);
+          HapticEngine.shardPickup(haptics);
           break;
         case 'door_open':
           audio.play('sfx_door');
@@ -295,6 +299,16 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
     setHint(sim.hints.current);
   }, [sim, input]);
 
+  /** "Retry Cleaner": back to the last checkpoint (or the start when none was reached). */
+  const retryFromCheckpoint = useCallback(() => {
+    input.cancelAll();
+    sim.respawn();
+    setFail(null);
+    setPaused(false);
+    bumpStick();
+    setSnap(makeSnapshot(sim));
+  }, [sim, input]);
+
   const togglePause = useCallback(() => {
     if (sim.status === 'won') return;
     input.cancelAll();
@@ -313,9 +327,7 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
         bus={bus}
         screenW={SW}
         screenH={SH}
-        scale={view.scale}
-        offsetX={view.offsetX}
-        offsetY={view.offsetY}
+        viewport={view}
         batKey={batKey}
         brightness={brightness}
       />
@@ -336,9 +348,9 @@ const LevelRunner: React.FC<RunnerProps> = ({ def, onExitToMenu, onNextLevel }) 
         restY={restY}
       />
 
-      <DebugOverlay sim={sim} bus={bus} screenW={SW} screenH={SH} scale={view.scale} offsetX={view.offsetX} offsetY={view.offsetY} fps={fps} />
+      <DebugOverlay sim={sim} bus={bus} screenW={SW} screenH={SH} viewport={view} fps={fps} />
 
-      {fail && sim.status === 'dying' && sim.failCause === 'enemy' && <FailScreen jump={fail.jump} onRetry={restart} onHome={onExitToMenu} />}
+      {fail && sim.status === 'dying' && sim.failCause === 'enemy' && <FailScreen jump={fail.jump} onRetry={retryFromCheckpoint} onHome={onExitToMenu} />}
 
       <PauseMenu visible={paused && result === null} onResume={() => setPaused(false)} onRestart={restart} onHome={onExitToMenu} />
 

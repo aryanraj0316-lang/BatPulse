@@ -149,6 +149,22 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
     markers.push(<Marker key={`m${m}`} x={sim.markerX[m]} y={sim.markerY[m]} width={56} height={56} progress={age / ECHO_CONFIG.enemy.soundMarkerSec} />);
   }
 
+  // checkpoints: always faintly visible, bright once reached
+  const cps: React.ReactNode[] = [];
+  const checkpoints = sim.world.def.checkpoints;
+  for (let c = 0; c < checkpoints.length; c++) {
+    const reached = c === sim.lastCheckpoint;
+    cps.push(<Piece key={`c${c}`} visual="checkpoint" x={checkpoints[c].x} y={checkpoints[c].y} w={ECHO_CONFIG.checkpoint.radius * 1.4} h={ECHO_CONFIG.checkpoint.radius * 1.4} glow={reached ? 1 : 0.35} active={reached} />);
+  }
+
+  // the wall of darkness on escape levels is always visible: it is a warning, not a secret
+  const Wall = AssetRegistry.getVisual('escape_wall');
+  const def = sim.world.def;
+  const wallY = sim.escapeWallY;
+  const wallNode = def.escape.enabled ? (
+    <Wall x={def.width / 2} y={wallY + 900} width={def.width + 40} height={1800} glow={1} time={time} />
+  ) : null;
+
   const waves: React.ReactNode[] = [];
   const w = sim.waves;
   for (let i = 0; i < w.size; i++) {
@@ -162,9 +178,11 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
   return (
     <Svg width={screenW} height={screenH} style={{ position: 'absolute', left: 0, top: 0 }}>
       <G transform={`translate(${offsetX + shakeX} ${offsetY + shakeY}) scale(${scale})`}>
+        {cps}
         {markers}
         {pieces}
         {waves}
+        {wallNode}
         <Bat
           x={b.x}
           y={b.y}

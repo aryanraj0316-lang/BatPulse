@@ -4,6 +4,7 @@ import Svg, { Circle, G, Line, Rect, Text as SvgText } from 'react-native-svg';
 import { FrameBus } from '../game/frameBus';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { GameSim } from '../sim/game';
+import { Viewport, viewOffsetY } from '../sim/world';
 import { DEBUG_ENABLED, useDebugFlags } from './debugFlags';
 
 interface Props {
@@ -11,9 +12,7 @@ interface Props {
   bus: FrameBus;
   screenW: number;
   screenH: number;
-  scale: number;
-  offsetX: number;
-  offsetY: number;
+  viewport: Viewport;
   fps: number;
 }
 
@@ -21,13 +20,16 @@ interface Props {
  * Debug drawing (dev builds only): hitboxes, hunter hearing radius + state + target line (so hunter behaviour can be
  * followed frame by frame), and the FPS counter.
  */
-export const DebugOverlay: React.FC<Props> = ({ sim, bus, screenW, screenH, scale, offsetX, offsetY, fps }) => {
+export const DebugOverlay: React.FC<Props> = ({ sim, bus, screenW, screenH, viewport, fps }) => {
   const flags = useDebugFlags();
   const [, redraw] = useReducer((n: number) => (n + 1) | 0, 0);
   useEffect(() => (DEBUG_ENABLED && (flags.showHitboxes || flags.showHearing) ? bus.subscribe(redraw) : undefined), [bus, flags.showHitboxes, flags.showHearing]);
   if (!DEBUG_ENABLED) return null;
 
   const b = sim.body;
+  const scale = viewport.scale;
+  const offsetX = viewport.offsetX;
+  const offsetY = viewOffsetY(viewport, b.y);
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {(flags.showHitboxes || flags.showHearing) && (

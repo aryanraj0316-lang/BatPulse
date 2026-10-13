@@ -265,6 +265,32 @@ const SoundMarker: React.FC<VisualProps> = (p) => {
   );
 };
 
+/**
+ * The wall of darkness on escape levels: a dark violet mass with a jagged glowing edge on top.
+ * x,y = centre of the whole mass, width/height = its size; glow scales the edge brightness.
+ */
+const EscapeWall: React.FC<VisualProps> = (p) => {
+  const left = p.x - p.width / 2;
+  const top = p.y - p.height / 2;
+  let d = `M${left},${top}`;
+  const teeth = Math.max(4, Math.round(p.width / 26));
+  for (let i = 0; i < teeth; i++) {
+    const x0 = left + (p.width * i) / teeth;
+    const x1 = left + (p.width * (i + 0.5)) / teeth;
+    const x2 = left + (p.width * (i + 1)) / teeth;
+    const wob = 10 + 6 * Math.sin(((p.time ?? 0) * 2 + i * 1.7));
+    d += ` L${x1},${top - wob} L${x2},${top}`;
+    void x0;
+  }
+  return (
+    <G opacity={p.glow ?? 1}>
+      <Rect x={left} y={top} width={p.width} height={p.height} fill="rgba(40, 0, 70, 0.78)" />
+      <Path d={d} stroke="#FF3B6E" strokeWidth={2.5} fill="none" opacity={0.9} />
+      <Path d={d} stroke="#FF3B6E" strokeWidth={8} fill="none" opacity={0.18} />
+    </G>
+  );
+};
+
 /* ───────────────────────────── Registration ───────────────────────────── */
 
 const wallStyle = (fresh: string, fading: string, echo: string): WallStyle => ({
@@ -295,6 +321,7 @@ export function registerPlaceholderAssets(): void {
     enemy_hunter: EnemyHunter,
     pulse_wave: PulseWave,
     sound_marker: SoundMarker,
+    escape_wall: EscapeWall,
   };
   (Object.keys(visuals) as VisualKey[]).forEach((k) => AssetRegistry.registerVisual(k, visuals[k]));
 

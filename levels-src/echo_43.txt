@@ -1,0 +1,169 @@
+{
+  "id": 43,
+  "name": "Fading Halls",
+  "sonar": {
+    "mode": "fixed",
+    "charges": 5,
+    "rechargeSec": 0
+  },
+  "ghostPulseLimit": 4,
+  "parTime": 56,
+  "starThresholds": {
+    "two": 111,
+    "three": 56
+  },
+  "chapter": 3,
+  "movingHazards": [
+    {
+      "kind": "slider",
+      "x": 120,
+      "y": 1460.0,
+      "width": 60,
+      "height": 24,
+      "travel": {
+        "x": 80,
+        "y": 0
+      },
+      "loopSec": 3,
+      "phase": 0
+    },
+    {
+      "kind": "slider",
+      "x": 120,
+      "y": 1640.0,
+      "width": 60,
+      "height": 24,
+      "travel": {
+        "x": 80,
+        "y": 0
+      },
+      "loopSec": 4,
+      "phase": 0.5
+    },
+    {
+      "kind": "blade",
+      "x": 135.0,
+      "y": 255.0,
+      "width": 110,
+      "height": 110,
+      "loopSec": 6,
+      "phase": 0.0
+    }
+  ],
+  "enemies": [
+    {
+      "type": "hunter",
+      "waypoints": [
+        {
+          "x": 40,
+          "y": 930.0
+        },
+        {
+          "x": 340,
+          "y": 930.0
+        }
+      ],
+      "speed": "slow",
+      "phaseSec": 1.5
+    }
+  ],
+  "escape": {
+    "enabled": false,
+    "wallSpeed": 0
+  }
+}
+---
+###################
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM.....F.....MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM.....p.....MMM#
+#MMM...........MMM#
+#MMM...........MMM#
+#MMM.....k.....MMM#
+#MMM...........MMM#
+#######.....#######
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#.................#
+#........p........#
+#.................#
+#.................#
+#........k........#
+#.................#
+#######.....#######
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC...p...CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC...S...CCCCC#
+#CCCCC.......CCCCC#
+#CCCCC.......CCCCC#
+###################

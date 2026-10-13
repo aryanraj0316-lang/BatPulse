@@ -20,9 +20,11 @@ export type SimEvent =
   | 'door_close'
   | 'pickup'
   | 'enemy_alert'
-  | 'heartbeat';
+  | 'heartbeat'
+  | 'checkpoint'
+  | 'respawn';
 export type SimStatus = 'playing' | 'dying' | 'won';
-export type FailCause = 'spike' | 'hazard' | 'enemy';
+export type FailCause = 'spike' | 'hazard' | 'enemy' | 'escape_wall';
 
 export interface SimParams {
   /** Pulse radius in world units. */
@@ -49,7 +51,17 @@ export class GameSim {
   /** Facing direction in radians (0 = right, -PI/2 = up). */
   rotation = -HALF_PI;
   status: SimStatus = 'playing';
+  /** Run timer in seconds. Keeps counting through checkpoint respawns (stars are about the whole run). */
   elapsed = 0;
+  /**
+   * Time as the world sees it: hazards, hunter patrols and the escape wall depend on it. Equals `elapsed` until the
+   * bat respawns at a checkpoint, where it rewinds to the moment the checkpoint was reached.
+   */
+  worldTime = 0;
+  /** World time at which hunters start to notice the bat (3 s after every start or respawn). */
+  armedAt: number = ECHO_CONFIG.enemy.spawnSafeSec;
+  /** Index of the checkpoint the bat will respawn at, -1 when none was reached. */
+  lastCheckpoint = -1;
   pulsesUsed = 0;
   /** Seconds of screen shake left. */
   shake = 0;
@@ -86,6 +98,9 @@ export class GameSim {
   private inX = 0;
   private inY = 0;
   private deathTimer = 0;
+  private checkpointSnap: { worldTime: number; charges: number; doors: Float32Array; pickups: Uint8Array } | null = null;
+  /** Pushes the escape wall back after a respawn so it is never right behind the bat. */
+  private wallBias = 0;
   private sincePulse = Infinity;
   private sinceHit = Infinity;
   /** Doors that are currently closed (solid). Rebuilt only when a door opens or closes. */
@@ -171,6 +186,11 @@ export class GameSim {
     this.rotation = -HALF_PI;
     this.status = 'playing';
     this.elapsed = 0;
+    this.worldTime = 0;
+    this.armedAt = ECHO_CONFIG.enemy.spawnSafeSec;
+    this.lastCheckpoint = -1;
+    this.checkpointSnap = null;
+    this.wallBias = 0;
     this.pulsesUsed = 0;
     this.shake = 0;
     this.deathTimer = 0;
@@ -210,7 +230,7 @@ export class GameSim {
     if (this.world.enemies.length > 0) {
       this.addMarker(this.body.x, this.body.y);
       // hunters hear pulses inside 1.2x the pulse radius, but not during the spawn safe window
-      if (this.elapsed >= ECHO_CONFIG.enemy.spawnSafeSec) this.enemies.hear(this.body.x, this.body.y, this.hearingRadius, this.closedDoors);
+      if (this.worldTime >= this.armedAt) this.enemies.hear(this.body.x, this.body.y, this.hearingRadius, this.closedDoors);
     }
     this.hints.onPulse();
     this.onEvent?.('pulse');
@@ -232,12 +252,13 @@ export class GameSim {
 
     if (this.status === 'dying') {
       this.deathTimer -= dt;
-      if (this.deathTimer <= 0) this.restart();
+      if (this.deathTimer <= 0) this.respawn();
       return;
     }
     if (this.status === 'won') return;
 
     this.elapsed += dt;
+    this.worldTime += dt;
     this.sincePulse += dt;
     this.sinceHit += dt;
     this.energy.update(dt);
@@ -253,7 +274,14 @@ export class GameSim {
     if (speed > cfg.momentum.movingSpeed) this.hints.onMoved();
 
     this.collectPickups();
+    this.updateCheckpoints();
     if (this.stepEnemies(dt)) return;
+    this.updateThreat(dt);
+    // the escape wall kills on touch
+    if (this.world.def.escape.enabled && this.body.y + this.body.r >= this.escapeWallY) {
+      this.die('escape_wall');
+      return;
+    }
 
     // spikes kill (hitbox slightly smaller than drawn, see config)
     const spikes = this.world.spikes;
@@ -286,7 +314,7 @@ export class GameSim {
   private syncHazards() {
     const hz = this.world.hazards;
     for (let i = 0; i < hz.length; i++) {
-      const p = hazardPose(hz[i], this.elapsed, this.poses[i]);
+      const p = hazardPose(hz[i], this.worldTime, this.poses[i]);
       const r = this.world.revealables[this.hazardReveal[i]];
       if (r) {
         r.x = p.x;
@@ -316,17 +344,33 @@ export class GameSim {
     this.markerAge[slot] = 0;
   }
 
-  /** Moves the hunters, updates the threat level and heartbeat. Returns true when the bat was caught. */
+  /** Moves the hunters. Returns true when the bat was caught. */
   private stepEnemies(dt: number): boolean {
     if (this.world.enemies.length === 0) return false;
-    const cfg = ECHO_CONFIG.enemy;
     const b = this.body;
-    const armed = this.elapsed >= cfg.spawnSafeSec;
+    const armed = this.worldTime >= this.armedAt;
     const caught = this.enemies.update(dt, b.x, b.y, b.r, armed, this.closedDoors, this.world.solids);
     this.syncEnemyBoxes();
-    // heartbeat: starts inside the threat radius and speeds up as the hunter gets closer
+    if (caught) {
+      this.die('enemy');
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Heartbeat and red screen edge: from the nearest hunter (inside ~5 tiles) or the escape wall (inside its
+   * warning range). The closer the danger, the stronger the edge and the faster the beat.
+   */
+  private updateThreat(dt: number) {
+    const cfg = ECHO_CONFIG.enemy;
     const range = cfg.threatRadiusTiles * cfg.tileSize;
-    this.threat = Math.max(0, Math.min(1, 1 - this.enemies.nearest / range));
+    let threat = this.world.enemies.length > 0 ? Math.max(0, 1 - this.enemies.nearest / range) : 0;
+    if (this.world.def.escape.enabled) {
+      const gap = this.escapeWallY - (this.body.y + this.body.r);
+      threat = Math.max(threat, Math.max(0, 1 - gap / ECHO_CONFIG.escape.warnRange));
+    }
+    this.threat = Math.min(1, threat);
     this.beatAge += dt;
     if (this.threat > 0) {
       this.beatTimer += dt;
@@ -339,11 +383,81 @@ export class GameSim {
     } else {
       this.beatTimer = 0;
     }
-    if (caught) {
-      this.die('enemy');
-      return true;
+  }
+
+  /** y of the front of the escape wall (the wall fills everything below it). Infinity when the level has none. */
+  get escapeWallY(): number {
+    const e = this.world.def.escape;
+    if (!e.enabled) return Infinity;
+    return this.world.def.start.y + (e.startGap ?? ECHO_CONFIG.escape.defaultStartGap) - e.wallSpeed * this.worldTime + this.wallBias;
+  }
+
+  /** Touching a checkpoint saves it: a death returns the bat here with the world as it was at that moment. */
+  private updateCheckpoints() {
+    const cps = this.world.def.checkpoints;
+    for (let i = 0; i < cps.length; i++) {
+      if (i === this.lastCheckpoint) continue;
+      if (Math.hypot(cps[i].x - this.body.x, cps[i].y - this.body.y) > ECHO_CONFIG.checkpoint.radius) continue;
+      this.lastCheckpoint = i;
+      this.checkpointSnap = {
+        worldTime: this.worldTime,
+        charges: this.energy.charges,
+        doors: this.doorTimer.slice(),
+        pickups: this.pickupTaken.slice(),
+      };
+      this.onEvent?.('checkpoint');
     }
-    return false;
+  }
+
+  /**
+   * Returns the bat to the last checkpoint (or restarts the level when none was reached).
+   * Everything is put back as it was when the checkpoint was reached: world time (hazards, hunter patrols, the wall),
+   * doors, pickups and sonar charges. The run timer keeps counting and the hunters get a fresh 3 s safe window.
+   */
+  respawn(): void {
+    const snap = this.checkpointSnap;
+    const cp = snap ? this.world.def.checkpoints[this.lastCheckpoint] : null;
+    if (!snap || !cp) {
+      this.restart();
+      return;
+    }
+    const b = this.body;
+    b.x = cp.x;
+    b.y = cp.y;
+    b.vx = 0;
+    b.vy = 0;
+    this.rotation = -HALF_PI;
+    this.status = 'playing';
+    this.failCause = null;
+    this.shake = 0;
+    this.deathTimer = 0;
+    this.sincePulse = Infinity;
+    this.sinceHit = Infinity;
+    this.worldTime = snap.worldTime;
+    this.armedAt = snap.worldTime + ECHO_CONFIG.enemy.spawnSafeSec;
+    this.energy.restore(snap.charges);
+    this.momentum.reset();
+    this.waves.clear();
+    this.reveal.clear();
+    this.doorTimer.set(snap.doors);
+    this.pickupTaken.set(snap.pickups);
+    this.enemies.reset(snap.worldTime, true);
+    this.markerAge.fill(Infinity);
+    this.threat = 0;
+    this.beatAge = 99;
+    this.beatTimer = 0;
+    // never respawn with the wall right behind the bat
+    const e = this.world.def.escape;
+    if (e.enabled) {
+      this.wallBias = 0;
+      const natural = this.escapeWallY;
+      this.wallBias = Math.max(0, b.y + ECHO_CONFIG.escape.respawnGap - natural);
+    }
+    this.rebuildClosedDoors();
+    this.syncHazards();
+    this.syncEnemyBoxes();
+    this.attempt++;
+    this.onEvent?.('respawn');
   }
 
   private rebuildClosedDoors() {
@@ -390,7 +504,7 @@ export class GameSim {
     }
     if (opened) this.rebuildClosedDoors();
     // the click carries: hunters nearby come to investigate (a way to draw them off)
-    if (this.world.enemies.length > 0 && this.elapsed >= ECHO_CONFIG.enemy.spawnSafeSec) {
+    if (this.world.enemies.length > 0 && this.worldTime >= this.armedAt) {
       const sw = this.world.switches[s];
       this.enemies.hear(sw.x, sw.y, ECHO_CONFIG.enemy.switchNoiseRadius, this.closedDoors);
     }

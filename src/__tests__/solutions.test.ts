@@ -14,6 +14,7 @@ const LOUD = path.join(__dirname, '..', '..', 'docs', 'loud_solutions.json');
 const readLoud = (): Record<string, LoudVariant> => (fs.existsSync(LOUD) ? JSON.parse(fs.readFileSync(LOUD, 'utf8')) : {});
 
 let loudTableForWrite: Record<string, LoudVariant> = {};
+const previousLoud: Record<string, LoudVariant> = readLoud();
 
 function build(): string {
   const loudTable: Record<string, LoudVariant> = process.env.WRITE_DOCS ? {} : readLoud();
@@ -45,9 +46,16 @@ function build(): string {
           // the loud solution: found by search when regenerating, replayed from the table otherwise
           let v: LoudVariant | undefined = loudTable[id];
           if (process.env.WRITE_DOCS) {
-            const found = findLoudSolution(def);
-            if (!found) throw new Error(`level ${id} has no loud solution`);
-            v = found.variant;
+            // keep a recorded variant while it still works; search only when it is missing or stale
+            const old = previousLoud[String(id)];
+            const stillGood = old ? flyTimed(def, {}, 'loud', old) : null;
+            if (old && stillGood && stillGood.finished && stillGood.deaths === 0 && stillGood.alerts > 0) {
+              v = old;
+            } else {
+              const found = findLoudSolution(def);
+              if (!found) throw new Error(`level ${id} has no loud solution`);
+              v = found.variant;
+            }
             loudTable[id] = v;
           }
           if (!v) throw new Error(`level ${id}: missing from loud_solutions.json (run WRITE_DOCS=1)`);

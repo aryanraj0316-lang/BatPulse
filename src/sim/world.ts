@@ -129,3 +129,45 @@ export function fitView(screenW: number, screenH: number, levelW: number, levelH
 export function pulseRadiusWorld(screenW: number, scale: number, fraction: number, mult: number = 1): number {
   return ((screenW * fraction) / scale) * mult;
 }
+
+export interface Viewport {
+  /** Pixels per world unit. */
+  scale: number;
+  offsetX: number;
+  /** True when the level is taller than the screen and the camera follows the bat. */
+  scrolls: boolean;
+  /** Where the view area starts and how tall it is (below the HUD), in screen px. */
+  viewTop: number;
+  viewH: number;
+  levelH: number;
+  /** Vertical offset used when the level does not scroll (it is centred in the view area). */
+  baseOffsetY: number;
+}
+
+/**
+ * Fits a level into the screen. A level that fits is centred; a taller one (multi-room and escape levels) is scaled to
+ * the screen WIDTH and scrolled vertically to follow the bat.
+ */
+export function fitViewport(screenW: number, viewTop: number, viewH: number, levelW: number, levelH: number): Viewport {
+  const fit = Math.min(screenW / levelW, viewH / levelH);
+  const widthScale = screenW / levelW;
+  const scrolls = levelH * widthScale > viewH + 0.5;
+  const scale = scrolls ? widthScale : fit;
+  return {
+    scale,
+    offsetX: (screenW - levelW * scale) / 2,
+    scrolls,
+    viewTop,
+    viewH,
+    levelH,
+    baseOffsetY: viewTop + (viewH - levelH * scale) / 2,
+  };
+}
+
+/** Screen y offset for the world, given where the bat is. The camera keeps the bat centred but never shows past the level. */
+export function viewOffsetY(v: Viewport, batY: number): number {
+  if (!v.scrolls) return v.baseOffsetY;
+  const visibleWorld = v.viewH / v.scale;
+  const top = Math.min(Math.max(0, batY - visibleWorld / 2), v.levelH - visibleWorld);
+  return v.viewTop - top * v.scale;
+}

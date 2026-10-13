@@ -86,6 +86,8 @@ export function validateLevel(raw: unknown): string[] {
   const t = l.starThresholds;
   if (!t || !isNum(t.two) || !isNum(t.three) || t.three <= 0 || t.three > t.two) bad('starThresholds needs two >= three > 0 (seconds)');
   if (!l.escape || typeof l.escape.enabled !== 'boolean' || !isNum(l.escape.wallSpeed) || l.escape.wallSpeed < 0) bad('escape needs enabled:boolean and wallSpeed >= 0');
+  else if (l.escape.enabled && !(l.escape.wallSpeed > 0)) bad('an enabled escape needs wallSpeed > 0');
+  else if (l.escape.startGap !== undefined && !(isNum(l.escape.startGap) && l.escape.startGap >= 0)) bad('escape.startGap must be >= 0');
 
   if (l.hints !== undefined) {
     if (!Array.isArray(l.hints)) bad('hints must be an array');

@@ -57,6 +57,12 @@ export class SonarEnergy {
     if (this.count >= this.rules.charges) this.timer = 0;
   }
 
+  /** Puts the charge count back to a saved value (checkpoint respawn). */
+  restore(count: number): void {
+    this.count = Math.max(0, Math.min(this.rules.charges, count));
+    this.timer = 0;
+  }
+
   reset(): void {
     this.count = this.rules.charges;
     this.timer = 0;

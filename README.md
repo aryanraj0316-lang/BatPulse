@@ -14,7 +14,8 @@ npm run web              # quick browser run (dev tools enabled)
 npm run android          # build and run on a device / emulator
 npm run e2e:phase1       # browser end-to-end (needs `npm run web` running + Edge/Chrome)
 npm run e2e:phase2
-WRITE_DOCS=1 npx jest solutions   # regenerate docs/LEVEL_SOLUTIONS.md
+WRITE_DOCS=1 npx jest solutions   # regenerate docs/LEVEL_SOLUTIONS.md (reuses recorded loud variants)
+LOUD_SEARCH=44 npx jest --testMatch "**/loudSearch.tool.ts"   # search a loud solution for given levels
 ```
 
 ## Layout

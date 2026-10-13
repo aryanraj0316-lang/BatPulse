@@ -165,13 +165,13 @@ Loud solution: wait 3 s, then pulse every 1 s from t=9 s; hunters alerted 1x, fi
 
 Stealth (ghost run) route: (70,589)@0s -> (163,495)@1.5s -> (296,436)@3s -> (324,284)@4.6s -> (295,132)@6.1s
 Pulses: none needed for the route (a player uses them to see).
-Loud solution: wait 8 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 14.4 s.
+Loud solution: wait 1 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 9.5 s.
 
 ### Echo 24 - Locked Crossing
 
 Stealth (ghost run) route: (70,590)@0s -> (75,595)@1.5s -> (75,595)@3s -> (75,568)@4.6s -> (184,495)@6.1s -> (285,404)@7.6s -> (285,252)@9.1s -> (295,102)@10.6s
 Pulses at: 0.4 s
-Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 10.8 s.
+Loud solution: wait 0 s, then pulse every 1 s from t=9 s; hunters alerted 1x, finished in 10.8 s.
 
 ### Echo 25 - Echoes and Eyes
 
@@ -207,7 +207,7 @@ Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, 
 
 Stealth (ghost run) route: (50,589)@0s -> (183,535)@1.5s -> (327,456)@3s -> (275,304)@4.6s -> (275,152)@6.1s
 Pulses: none needed for the route (a player uses them to see).
-Loud solution: wait 8 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 15.3 s.
+Loud solution: wait 2 s, then pulse every 2 s from t=9 s; hunters alerted 1x, finished in 12.4 s.
 
 ### Echo 31 - Fast and Slow
 
@@ -219,7 +219,7 @@ Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, fi
 
 Stealth (ghost run) route: (50,589)@0s -> (183,535)@1.5s -> (265,436)@3s -> (265,284)@4.6s -> (265,132)@6.1s
 Pulses: none needed for the route (a player uses them to see).
-Loud solution: wait 5 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 11.4 s.
+Loud solution: wait 1 s, then pulse every 1 s from t=9 s; hunters alerted 1x, finished in 11.0 s.
 
 ### Echo 33 - Two Hunters, One Door
 
@@ -231,11 +231,116 @@ Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, fi
 
 Stealth (ghost run) route: (50,590)@0s -> (55,595)@1.5s -> (55,587)@3s -> (55,434)@4.6s -> (55,282)@6.1s -> (190,225)@7.6s -> (326,159)@9.1s
 Pulses: none needed for the route (a player uses them to see).
-Loud solution: wait 0 s, then pulse every 1 s from t=9 s; hunters alerted 1x, finished in 10.1 s.
+Loud solution: wait 4 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 11.4 s.
 
 ### Echo 35 - The Listening Deep
 
 Stealth (ghost run) route: (50,590)@0s -> (55,595)@1.5s -> (55,612)@3s -> (55,615)@4.6s -> (55,615)@6.1s -> (55,615)@7.6s -> (98,534)@9.1s -> (248,532)@10.6s -> (265,382)@12.1s -> (268,232)@13.6s -> (303,94)@15.1s
 Pulses at: 3.5 s
-Loud solution: wait 0 s, then pulse every 1 s from t=7 s; hunters alerted 1x, finished in 8.6 s.
+Loud solution: wait 4 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 8.5 s.
+
+## Chapter 3: The Silent Abyss
+
+| Echo | Name | Sonar | Elements | Clean time | Pulses used | 3 stars | 2 stars |
+|---|---|---|---|---|---|---|---|
+| 36 | Two Rooms | fixed 5 | slider, blade, 2 pickup | 12.0 s | 0 | <= 37 s | <= 73 s |
+| 37 | Spiked Ascent | fixed 5 | spikes, 1 hunter (slow), 2 pickup | 12.4 s | 0 | <= 38 s | <= 75 s |
+| 38 | Gate and Slide | fixed 5 | slider, 1 switch/door, 2 pickup | 13.0 s | 1 | <= 40 s | <= 79 s |
+| 39 | Three Chambers | fixed 5 | slider, blade, 1 hunter (slow), 3 pickup | 18.4 s | 0 | <= 56 s | <= 111 s |
+| 40 | Watched Gate | fixed 5 | spikes, 1 switch/door, 1 hunter (slow), 3 pickup | 19.7 s | 1 | <= 59 s | <= 118 s |
+| 41 | Blades and Eyes | fixed 5 | blade, 2 hunters (slow/fast), 2 pickup | 11.9 s | 0 | <= 36 s | <= 72 s |
+| 42 | Locked Depths | fixed 5 | 2 switch/door, 2 hunters (slow), 3 pickup | 19.8 s | 2 | <= 60 s | <= 119 s |
+| 43 | Fading Halls | fixed 5 | slider, blade, crystal, mossy, 1 hunter (slow), 3 pickup | 18.4 s | 0 | <= 56 s | <= 111 s |
+| 44 | Triple Watch | fixed 5 | blade, 1 switch/door, 2 hunters (fast/slow), 3 pickup | 19.4 s | 1 | <= 59 s | <= 117 s |
+| 45 | The Long Way | fixed 5 | spikes, blade, 1 switch/door, 2 hunters (slow), 3 pickup | 19.6 s | 1 | <= 59 s | <= 118 s |
+| 46 | Rising Dark | fixed 5 | spikes, slider, 2 pickup | 13.1 s | 0 | <= 20 s | <= 29 s |
+| 47 | Swept Away | fixed 5 | slider, blade, 2 pickup | 11.9 s | 0 | <= 18 s | <= 27 s |
+| 48 | Hunted and Haunted | fixed 5 | spikes, 1 hunter (slow), 2 pickup | 12.4 s | 0 | <= 19 s | <= 28 s |
+| 49 | Doors in the Dark | fixed 5 | slider, blade, 1 switch/door, 3 pickup | 19.5 s | 1 | <= 30 s | <= 43 s |
+| 50 | The Last Echo | fixed 5 | spikes, blade, 1 switch/door, 2 hunters (slow), 3 pickup | 19.7 s | 1 | <= 30 s | <= 44 s |
+
+### Echo 36 - Two Rooms
+
+Route: (190,1190)@0s -> (195,1107)@1.5s -> (217,956)@3s -> (145,804)@4.6s -> (164,652)@6.1s -> (195,524)@7.6s -> (238,372)@9.1s -> (265,222)@10.6s
+Pulses: none needed for the route (a player uses them to see).
+
+### Echo 37 - Spiked Ascent
+
+Stealth (ghost run) route: (190,1189)@0s -> (95,1037)@1.5s -> (214,994)@3s -> (285,844)@4.6s -> (253,693)@6.1s -> (195,564)@7.6s -> (195,412)@9.1s -> (304,262)@10.6s -> (232,112)@12.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 11.9 s.
+
+### Echo 38 - Gate and Slide
+
+Route: (189,1189)@0s -> (155,1119)@1.5s -> (171,968)@3s -> (185,816)@4.6s -> (185,664)@6.1s -> (195,595)@7.6s -> (195,474)@9.1s -> (215,324)@10.6s -> (235,174)@12.1s
+Pulses at: 0.8 s
+
+### Echo 39 - Three Chambers
+
+Stealth (ghost run) route: (190,1810)@0s -> (201,1677)@1.5s -> (217,1576)@3s -> (145,1424)@4.6s -> (164,1272)@6.1s -> (195,1144)@7.6s -> (238,992)@9.1s -> (265,842)@10.6s -> (254,692)@12.1s -> (195,564)@13.6s -> (195,414)@15.1s -> (206,264)@16.6s -> (205,112)@18.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 17.7 s.
+
+### Echo 40 - Watched Gate
+
+Stealth (ghost run) route: (189,1809)@0s -> (155,1739)@1.5s -> (171,1588)@3s -> (185,1436)@4.6s -> (185,1284)@6.1s -> (195,1156)@7.6s -> (174,1004)@9.1s -> (175,854)@10.6s -> (175,704)@12.1s -> (195,580)@13.6s -> (95,426)@15.1s -> (204,375)@16.6s -> (286,234)@18.1s -> (204,84)@19.6s
+Pulses at: 0.8 s
+Loud solution: wait 1 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 17.2 s.
+
+### Echo 41 - Blades and Eyes
+
+Stealth (ghost run) route: (190,1189)@0s -> (195,1037)@1.5s -> (265,886)@3s -> (265,734)@4.6s -> (194,594)@6.1s -> (105,514)@7.6s -> (105,362)@9.1s -> (105,212)@10.6s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 11.9 s.
+
+### Echo 42 - Locked Depths
+
+Stealth (ghost run) route: (189,1809)@0s -> (155,1739)@1.5s -> (171,1588)@3s -> (185,1436)@4.6s -> (185,1284)@6.1s -> (143,1163)@7.6s -> (145,1087)@9.1s -> (186,937)@10.6s -> (185,787)@12.1s -> (185,637)@13.6s -> (261,509)@15.1s -> (269,384)@16.6s -> (119,249)@18.1s -> (172,98)@19.6s
+Pulses at: 0.8, 8 s
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 19.8 s.
+
+### Echo 43 - Fading Halls
+
+Stealth (ghost run) route: (190,1810)@0s -> (195,1727)@1.5s -> (217,1576)@3s -> (145,1424)@4.6s -> (164,1272)@6.1s -> (195,1144)@7.6s -> (114,992)@9.1s -> (115,842)@10.6s -> (126,692)@12.1s -> (195,564)@13.6s -> (197,414)@15.1s -> (275,264)@16.6s -> (232,112)@18.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 2 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 16.9 s.
+
+### Echo 44 - Triple Watch
+
+Stealth (ghost run) route: (189,1809)@0s -> (155,1739)@1.5s -> (171,1588)@3s -> (185,1436)@4.6s -> (185,1284)@6.1s -> (195,1156)@7.6s -> (226,1004)@9.1s -> (265,854)@10.6s -> (263,704)@12.1s -> (195,587)@13.6s -> (246,436)@15.1s -> (245,286)@16.6s -> (144,134)@18.1s
+Pulses at: 0.8 s
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 19.0 s.
+
+### Echo 45 - The Long Way
+
+Stealth (ghost run) route: (190,1809)@0s -> (95,1657)@1.5s -> (214,1614)@3s -> (285,1464)@4.6s -> (253,1313)@6.1s -> (167,1187)@7.6s -> (144,1115)@9.1s -> (174,966)@10.6s -> (185,816)@12.1s -> (185,666)@13.6s -> (195,537)@15.1s -> (245,387)@16.6s -> (98,238)@18.1s -> (184,86)@19.6s
+Pulses at: 8.3 s
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 19.6 s.
+
+### Echo 46 - Rising Dark
+
+Route: (190,1190)@0s -> (195,1107)@1.5s -> (217,956)@3s -> (145,804)@4.6s -> (164,652)@6.1s -> (154,524)@7.6s -> (107,375)@9.1s -> (246,332)@10.6s -> (285,182)@12.1s
+Pulses: none needed for the route (a player uses them to see).
+
+### Echo 47 - Swept Away
+
+Route: (190,1189)@0s -> (195,1037)@1.5s -> (275,886)@3s -> (275,734)@4.6s -> (194,594)@6.1s -> (195,514)@7.6s -> (145,362)@9.1s -> (145,212)@10.6s
+Pulses: none needed for the route (a player uses them to see).
+
+### Echo 48 - Hunted and Haunted
+
+Stealth (ghost run) route: (190,1189)@0s -> (95,1037)@1.5s -> (214,994)@3s -> (285,844)@4.6s -> (253,693)@6.1s -> (195,564)@7.6s -> (195,412)@9.1s -> (304,262)@10.6s -> (232,112)@12.1s
+Pulses: none needed for the route (a player uses them to see).
+Loud solution: wait 0 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 11.9 s.
+
+### Echo 49 - Doors in the Dark
+
+Route: (189,1809)@0s -> (155,1739)@1.5s -> (171,1588)@3s -> (185,1436)@4.6s -> (185,1284)@6.1s -> (195,1215)@7.6s -> (195,1094)@9.1s -> (215,944)@10.6s -> (235,794)@12.1s -> (214,644)@13.6s -> (195,516)@15.1s -> (244,366)@16.6s -> (265,216)@18.1s
+Pulses at: 0.8 s
+
+### Echo 50 - The Last Echo
+
+Stealth (ghost run) route: (189,1809)@0s -> (150,1739)@1.5s -> (172,1588)@3s -> (185,1436)@4.6s -> (185,1284)@6.1s -> (224,1156)@7.6s -> (293,1004)@9.1s -> (144,854)@10.6s -> (135,704)@12.1s -> (195,580)@13.6s -> (95,426)@15.1s -> (204,375)@16.6s -> (286,234)@18.1s -> (204,84)@19.6s
+Pulses at: 0.8 s
+Loud solution: wait 1 s, then pulse every 1 s from t=3.2 s; hunters alerted 1x, finished in 17.9 s.
 

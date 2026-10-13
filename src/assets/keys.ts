@@ -19,6 +19,7 @@ export const VISUAL_KEYS = [
   'enemy_hunter',
   'pulse_wave',
   'sound_marker',
+  'escape_wall',
 ] as const;
 export type VisualKey = (typeof VISUAL_KEYS)[number];
 

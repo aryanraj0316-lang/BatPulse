@@ -77,7 +77,11 @@ export interface LevelDef {
   parTime: number;
   /** Seconds. three <= two: finishing at or under `two` gives 2 stars, at or under `three` gives 3. */
   starThresholds: { two: number; three: number };
-  escape: { enabled: boolean; wallSpeed: number };
+  /**
+   * Escape levels: a wall of darkness rises from behind the start at `wallSpeed` units/s (kills on touch).
+   * `startGap` = how far behind the start it begins (default 140).
+   */
+  escape: { enabled: boolean; wallSpeed: number; startGap?: number };
   /** On-screen onboarding hints, shown one after another. */
   hints?: HintDef[];
 }

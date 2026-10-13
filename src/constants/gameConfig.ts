@@ -76,6 +76,12 @@ export const ECHO_CONFIG = {
     jumpEffectCooldownSec: 25, // the dark jump effect is not repeated more often than this
     jumpEffectMaxPerLevel: 2,
   },
+  checkpoint: { radius: 24 },
+  escape: {
+    defaultStartGap: 140, // the wall starts this far behind the start point
+    respawnGap: 220, // after a checkpoint respawn the wall is pushed back to at least this far behind the bat
+    warnRange: 180, // heartbeat and red edge when the wall is this close
+  },
   door: {
     openSec: 8,
     switchLosEnabled: true, // a pulse must have a clear line to the switch to trigger it

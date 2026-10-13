@@ -36,6 +36,21 @@ import echo32 from './data/echo_32.json';
 import echo33 from './data/echo_33.json';
 import echo34 from './data/echo_34.json';
 import echo35 from './data/echo_35.json';
+import echo36 from './data/echo_36.json';
+import echo37 from './data/echo_37.json';
+import echo38 from './data/echo_38.json';
+import echo39 from './data/echo_39.json';
+import echo40 from './data/echo_40.json';
+import echo41 from './data/echo_41.json';
+import echo42 from './data/echo_42.json';
+import echo43 from './data/echo_43.json';
+import echo44 from './data/echo_44.json';
+import echo45 from './data/echo_45.json';
+import echo46 from './data/echo_46.json';
+import echo47 from './data/echo_47.json';
+import echo48 from './data/echo_48.json';
+import echo49 from './data/echo_49.json';
+import echo50 from './data/echo_50.json';
 
 /**
  * Registry of authored level files. A new level is added by dropping a JSON file in ./data
@@ -78,6 +93,21 @@ const RAW_LEVELS: Record<number, unknown> = {
   33: echo33,
   34: echo34,
   35: echo35,
+  36: echo36,
+  37: echo37,
+  38: echo38,
+  39: echo39,
+  40: echo40,
+  41: echo41,
+  42: echo42,
+  43: echo43,
+  44: echo44,
+  45: echo45,
+  46: echo46,
+  47: echo47,
+  48: echo48,
+  49: echo49,
+  50: echo50,
 };
 
 const strictByDefault = (): boolean => (typeof __DEV__ !== 'undefined' ? __DEV__ : true);

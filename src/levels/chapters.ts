@@ -8,10 +8,11 @@ export interface Chapter {
   last: number;
 }
 
-/** Chapter grouping for Level Select. Chapter 3 is added with its levels in Phase 4. */
+/** Chapter grouping for Level Select (Echo 01-50). */
 export const CHAPTERS: readonly Chapter[] = [
   { id: 1, name: 'The Dark Cavern', first: 1, last: 20 },
   { id: 2, name: 'The Listening Deep', first: 21, last: 35 },
+  { id: 3, name: 'The Silent Abyss', first: 36, last: 50 },
 ];
 
 export function chapterLevelIds(c: Chapter): number[] {

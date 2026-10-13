@@ -10,14 +10,14 @@
     "noiseFrom": 9
   },
   "23": {
-    "startDelay": 8,
+    "startDelay": 1,
     "noiseEvery": 1,
-    "noiseFrom": 3.2
+    "noiseFrom": 7
   },
   "24": {
     "startDelay": 0,
     "noiseEvery": 1,
-    "noiseFrom": 7
+    "noiseFrom": 9
   },
   "25": {
     "startDelay": 0,
@@ -45,9 +45,9 @@
     "noiseFrom": 3.2
   },
   "30": {
-    "startDelay": 8,
-    "noiseEvery": 1,
-    "noiseFrom": 3.2
+    "startDelay": 2,
+    "noiseEvery": 2,
+    "noiseFrom": 9
   },
   "31": {
     "startDelay": 0,
@@ -55,9 +55,9 @@
     "noiseFrom": 7
   },
   "32": {
-    "startDelay": 5,
+    "startDelay": 1,
     "noiseEvery": 1,
-    "noiseFrom": 7
+    "noiseFrom": 9
   },
   "33": {
     "startDelay": 0,
@@ -65,13 +65,84 @@
     "noiseFrom": 7
   },
   "34": {
-    "startDelay": 0,
-    "noiseEvery": 1,
-    "noiseFrom": 9
-  },
-  "35": {
-    "startDelay": 0,
+    "startDelay": 4,
     "noiseEvery": 1,
     "noiseFrom": 7
+  },
+  "35": {
+    "startDelay": 4,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "sprint": true
+  },
+  "37": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "39": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "40": {
+    "startDelay": 1,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "sprint": true,
+    "noiseAtFraction": 0.4
+  },
+  "41": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "42": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "43": {
+    "startDelay": 2,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "sprint": true,
+    "noiseAtFraction": 0.4
+  },
+  "44": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "45": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "48": {
+    "startDelay": 0,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
+  },
+  "50": {
+    "startDelay": 1,
+    "noiseEvery": 1,
+    "noiseFrom": 3.2,
+    "noiseAfterPassing": true,
+    "sprint": true
   }
 }
