@@ -14,14 +14,19 @@ const smoothstep = (u: number) => {
   return c * c * (3 - 2 * c);
 };
 
-/** 1 inside the safe part of the radius, smoothly down to 0 at the very edge of the wave. */
-export function edgeFalloff(distance: number, maxRadius: number, falloff: number = ECHO_CONFIG.sonar.edgeFalloff): number {
-  if (maxRadius <= 0) return 0;
-  const t = distance / maxRadius;
-  const start = 1 - falloff;
-  if (t <= start) return 1;
-  if (t >= 1) return 0;
-  return 1 - smoothstep((t - start) / falloff);
+/**
+ * Distance attenuation of a pulse: 1 right next to the bat, decreasing smoothly with distance to a faint `minIntensity`
+ * at the edge of the wave's reach, and 0 beyond it. brightness = min + (1 - min) * (1 - distance / radius) ^ exponent.
+ */
+export function edgeFalloff(
+  distance: number,
+  maxRadius: number,
+  exponent: number = ECHO_CONFIG.sonar.falloffExponent,
+  minIntensity: number = ECHO_CONFIG.sonar.edgeMinIntensity,
+): number {
+  if (maxRadius <= 0 || !(distance < maxRadius)) return 0;
+  const t = Math.max(0, distance) / maxRadius;
+  return minIntensity + (1 - minIntensity) * Math.pow(1 - t, exponent);
 }
 
 /** Brightness over the life of one reveal: hold at full, then ease out. progress 0..1. */

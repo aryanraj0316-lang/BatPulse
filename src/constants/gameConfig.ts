@@ -10,7 +10,8 @@ export const ECHO_CONFIG = {
     tutorialRechargeSec: 2, // Echo 01-05
     tutorialLevelMax: 5,
     maxRadiusScreenFraction: 0.4, // of screen width
-    edgeFalloff: 0.35, // 0..1: share of the radius over which the wave fades out
+    falloffExponent: 1, // brightness = (1 - distance / radius) ^ this: 1 = linear, >1 drops faster near the bat, <1 stays brighter longer
+    edgeMinIntensity: 0.1, // faintest highlight just inside the wave's reach (beyond the radius is 0)
     glowHoldFraction: 0.4, // share of the glow time spent at full brightness before fading
     maxWaves: 8, // size of the pooled wave array
     waveLingerSec: 0.25, // how long the ring stays drawable after reaching full size

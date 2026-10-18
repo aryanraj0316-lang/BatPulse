@@ -279,18 +279,28 @@ describe('wave radius, falloff and reveal timing', () => {
     expect(v.offsetX).toBeCloseTo(0);
     expect(v.offsetY).toBeCloseTo((900 - 660 * v.scale) / 2);
   });
-  it('edge falloff: full inside, smooth to zero at the rim', () => {
+  it('distance falloff: brightest next to the bat, steadily dimmer with distance, faint at the rim, zero beyond', () => {
     expect(edgeFalloff(0, 100)).toBe(1);
-    expect(edgeFalloff(65, 100)).toBe(1); // 1 - 0.35
-    expect(edgeFalloff(100, 100)).toBe(0);
+    expect(edgeFalloff(50, 100)).toBeCloseTo(0.1 + 0.9 * 0.5, 6); // linear: min + (1 - min) * (1 - d/r)
+    expect(edgeFalloff(99.9, 100)).toBeGreaterThan(0.1); // faint but visible at the edge of the reach
+    expect(edgeFalloff(99.9, 100)).toBeLessThan(0.11);
+    expect(edgeFalloff(100, 100)).toBe(0); // beyond the reach
     expect(edgeFalloff(120, 100)).toBe(0);
-    let last = 1;
-    for (let d = 65; d <= 100; d += 1) {
+    expect(edgeFalloff(10, 0)).toBe(0);
+    expect(edgeFalloff(-5, 100)).toBe(1); // never above 1
+    let last = 2;
+    for (let d = 0; d < 100; d += 1) {
       const f = edgeFalloff(d, 100);
-      expect(f).toBeLessThanOrEqual(last + 1e-9); // monotonic, no jumps
-      expect(last - f).toBeLessThan(0.1);
+      expect(f).toBeLessThan(last); // strictly decreasing over the whole range, no flat plateau
+      expect(f).toBeGreaterThanOrEqual(0.1);
+      expect(f).toBeLessThanOrEqual(1);
       last = f;
     }
+  });
+  it('the falloff exponent and the edge floor are tunable', () => {
+    expect(edgeFalloff(50, 100, 2, 0)).toBeCloseTo(0.25, 6); // (1 - 0.5) ^ 2
+    expect(edgeFalloff(50, 100, 0.5, 0)).toBeCloseTo(Math.sqrt(0.5), 6);
+    expect(edgeFalloff(99.99, 100, 1, 0.3)).toBeCloseTo(0.3, 2);
   });
   it('glow holds then fades to zero', () => {
     expect(glowCurve(0)).toBe(1);
@@ -324,6 +334,14 @@ describe('wave radius, falloff and reveal timing', () => {
     const near = lightUp([box(50)], 100, 35, 0.01).rs.glow[0];
     const rim = lightUp([box(98)], 100, 35, 0.01).rs.glow[0];
     expect(rim).toBeLessThan(near);
+  });
+  it('the closer a wall is to the bat, the brighter it lights (whole range, not just the rim)', () => {
+    const peak = (x: number) => lightUp([box(x)], 100, 35, 0.01).rs.glow[0];
+    const glows = [5, 25, 45, 65, 85, 97].map(peak);
+    for (let i = 1; i < glows.length; i++) expect(glows[i]).toBeLessThan(glows[i - 1]);
+    expect(glows[0]).toBeGreaterThan(0.9); // closest: full
+    expect(glows[5]).toBeGreaterThan(0); // at the rim: faint but there
+    expect(glows[5]).toBeLessThan(0.2);
   });
   it('revealed objects glow ~1.5 s, then are gone', () => {
     const items = [box(20)];
