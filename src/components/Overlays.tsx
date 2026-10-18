@@ -11,7 +11,8 @@ export const StickVisual: React.FC<{ input: TouchInput; restX: number; restY: nu
   const cx = active ? input.originX : restX;
   const cy = active ? input.originY : restY;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    // the whole stick is drawn at low opacity: it only marks where it is, it must not distract from the dark
+    <View style={[StyleSheet.absoluteFill, { opacity: active ? ECHO_CONFIG.input.stickActiveAlpha : ECHO_CONFIG.input.stickRestAlpha }]} pointerEvents="none" testID="stick-visual">
       <View
         style={[
           styles.ring,
@@ -21,7 +22,7 @@ export const StickVisual: React.FC<{ input: TouchInput; restX: number; restY: nu
             width: r * 2,
             height: r * 2,
             borderRadius: r,
-            borderColor: active ? PALETTE.sonarCyan : 'rgba(255,255,255,0.15)',
+            borderColor: active ? PALETTE.sonarCyan : '#FFFFFF',
             backgroundColor: active ? 'rgba(77, 240, 255, 0.08)' : 'rgba(10, 16, 28, 0.3)',
           },
         ]}
@@ -32,7 +33,7 @@ export const StickVisual: React.FC<{ input: TouchInput; restX: number; restY: nu
           {
             left: cx + input.knobX - 20,
             top: cy + input.knobY - 20,
-            backgroundColor: active ? PALETTE.sonarCyan : 'rgba(255,255,255,0.25)',
+            backgroundColor: active ? PALETTE.sonarCyan : '#FFFFFF',
           },
         ]}
       />

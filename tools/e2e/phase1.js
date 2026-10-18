@@ -68,13 +68,16 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     let s = await state(h);
     check('splash goes directly to Echo 01', s && s.id === 1, JSON.stringify(s && s.id));
     check('HUD shows level id and name', (await h.text('game-screen')).includes('ECHO 01') && (await h.text('game-screen')).includes('FIRST ECHO'));
-    check('first hint (move) is shown', (await h.text('hint-text')) === 'Drag on the right side to fly', await h.text('hint-text'));
+    check('first hint (move) is shown', (await h.text('hint-text')) === 'Drag anywhere to fly', await h.text('hint-text'));
     check('3 sonar charges at start', s.charges === 3 && (await h.text('hud-sonar')).includes('3 / 3'), await h.text('hud-sonar'));
     check('momentum starts at x1.0', (await h.text('hud-momentum')).includes('1.0'));
     
-    // ---- SONAR touch target >= 64 dp
-    const box = await h.eval(`(()=>{const e=document.querySelector('[data-testid="sonar-button"]');const r=e.getBoundingClientRect();return {w:r.width,h:r.height};})()`);
-    check('SONAR touch target is at least 64 dp', box.w - 48 >= 64 && box.h - 48 >= 64, `${box.w - 48}x${box.h - 48} visible + 24 slop`);
+    // ---- no sonar button: the whole play area takes touches, the joystick is barely visible
+    check('there is no SONAR button on screen', !(await h.exists('sonar-button')) && !(await h.eval(`[...document.querySelectorAll('div,span')].some(e=>e.children.length===0&&e.textContent.trim()==='SONAR')`)));
+    const zone = await h.eval(`(()=>{const e=document.querySelector('[data-testid="touch-zone"]');const r=e.getBoundingClientRect();return {w:r.width,h:r.height,top:r.top};})()`);
+    check('one touch zone covers the whole play area below the HUD', zone.w >= 380 && zone.top < 150 && zone.top > 60, JSON.stringify(zone));
+    const alpha = await h.eval(`parseFloat(getComputedStyle(document.querySelector('[data-testid="stick-visual"]')).opacity)`);
+    check('the joystick is drawn at low opacity (0.15 to 0.25)', alpha >= 0.15 && alpha <= 0.25, String(alpha));
 
     // ---- joystick: dead zone, movement, hint progression, momentum
     await h.touch('touchStart', [{ id: 1, x: 300, y: 600 }]);
@@ -86,7 +89,7 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     await sleep(2300);
     const mid = await state(h);
     check('dragging the stick moves the bat', mid.y < s.y - 100, `y ${s.y.toFixed(0)} -> ${mid.y.toFixed(0)}`);
-    check('move hint advances to the pulse hint', (await h.text('hint-text')) === 'Tap SONAR to send a pulse', await h.text('hint-text'));
+    check('move hint advances to the pulse hint', (await h.text('hint-text')) === 'Tap anywhere to send a pulse', await h.text('hint-text'));
     check('momentum grows after 2 s of movement', mid.mom >= 1.1, `x${mid.mom}`);
     await h.shot('03_moving');
 
@@ -95,10 +98,11 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     await h.touch('touchMove', [{ id: 1, x: 350, y: 600 }]); // steer right (away from the top wall)
     await sleep(500);
     await h.touch('touchStart', [{ id: 1, x: 350, y: 600 }, { id: 2, x: sonar.x, y: sonar.y }]);
-    await h.touch('touchMove', [{ id: 1, x: 350, y: 600 }]); // CDP: a point missing from the list is released (the SONAR finger)
+    await sleep(50);
+    await h.touch('touchEnd', [{ id: 2, x: sonar.x, y: sonar.y }]); // the other thumb lifts: a quick tap = pulse, the stick finger stays down
     await sleep(120);
     const both = await state(h);
-    check('SONAR fires while the stick is held (multi-touch)', both.pulses === 1 && both.charges === 2, `pulses ${both.pulses}, charges ${both.charges}`);
+    check('a tap with the other thumb sends a pulse while the stick is held (multi-touch)', both.pulses === 1 && both.charges === 2, `pulses ${both.pulses}, charges ${both.charges}`);
     check('stick keeps steering during the pulse', Math.hypot(both.vx, both.vy) > 60, `speed ${Math.hypot(both.vx, both.vy).toFixed(0)}`);
     check('pulse hint advances', (await h.text('hint-text')) === 'Reach the purple ring', await h.text('hint-text'));
     await sleep(150);
@@ -118,6 +122,40 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     const after = await state(h);
     check('an extra finger does not change the stick direction', after.vx * dir > 100 && Math.abs(after.vy) < 40, `v=(${after.vx.toFixed(0)},${after.vy.toFixed(0)})`);
     await h.touch('touchEnd', []);
+
+    // ---- gestures: a quick tap is the pulse, a drag or a hold is the joystick (never both)
+    await sleep(2500); // let the bat settle and a charge come back
+    const stickOn = () => h.eval('window.__echo.input.active');
+    let g0 = await state(h);
+    await h.touch('touchStart', [{ id: 31, x: 120, y: 420 }]); // quick tap, left side of the screen
+    await sleep(60);
+    await h.touch('touchEnd', []);
+    await sleep(150);
+    let g1 = await state(h);
+    check('a quick tap anywhere sends one pulse', g1.pulses === g0.pulses + 1, `pulses ${g0.pulses} -> ${g1.pulses}`);
+    check('the tap did not engage the joystick or move the bat', !(await stickOn()) && Math.hypot(g1.vx, g1.vy) < 60, `speed ${Math.hypot(g1.vx, g1.vy).toFixed(0)}`);
+    await sleep(2200);
+    g0 = await state(h);
+    await h.touch('touchStart', [{ id: 32, x: 300, y: 620 }]);
+    await h.touch('touchMove', [{ id: 32, x: 300, y: 590 }]); // 30 px: a drag
+    await sleep(150);
+    check('a drag engages the joystick', await stickOn());
+    await h.touch('touchEnd', []);
+    await sleep(150);
+    g1 = await state(h);
+    check('a drag sends no pulse', g1.pulses === g0.pulses, `pulses ${g0.pulses} -> ${g1.pulses}`);
+    await sleep(800);
+    g0 = await state(h);
+    await h.touch('touchStart', [{ id: 33, x: 300, y: 620 }]);
+    await sleep(450); // held still, longer than the tap limit
+    const heldOn = await stickOn();
+    await h.touch('touchEnd', []);
+    await sleep(150);
+    g1 = await state(h);
+    check('a long press takes the joystick', heldOn);
+    check('a long press sends no pulse, not even when released', g1.pulses === g0.pulses, `pulses ${g0.pulses} -> ${g1.pulses}`);
+    check('after every gesture the joystick is released', !(await stickOn()));
+    await h.shot('04b_gestures');
 
     // ---- recharge (tutorial: 2 s per charge)
     await sleep(500);

@@ -74,11 +74,11 @@
   },
   "hints": [
     {
-      "text": "Drag on the right side to fly",
+      "text": "Drag anywhere to fly",
       "until": "move"
     },
     {
-      "text": "Tap SONAR to send a pulse",
+      "text": "Tap anywhere to send a pulse",
       "until": "pulse"
     },
     {

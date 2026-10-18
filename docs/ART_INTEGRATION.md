@@ -38,7 +38,7 @@ is transparent, a freshly pinged one is fully visible). Draw them on a **transpa
 | `pickup_charge` | 20 x 20 | Sonar charge. |
 | `finish` | 36 x 36 | The goal ring. |
 | `checkpoint` | 34 x 34 | Always faintly visible, bright when reached. |
-| `pulse_wave` | scaled to 2x the pulse radius (300 to 900) | A thin ring with a transparent centre, author at 1024 x 1024. Expands and fades. |
+| `pulse_wave` | scaled to 2x the pulse radius (300 to 900) | **Not drawn right now**: the player only sees the walls it lights up, not the ring. Kept in the registry so art can be shown again by drawing it in `GameView` (see the comment where the wave used to be drawn). |
 | `sound_marker` | 56 x 56 | Faint ring showing where a noise was made. |
 | `escape_wall` | level width x 1800 | A wall of darkness: soft top edge, solid below. Always visible on escape levels. |
 

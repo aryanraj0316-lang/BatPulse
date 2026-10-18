@@ -18,7 +18,6 @@ export const ECHO_CONFIG = {
     revealGlowSec: 1.5,
     expandSec: 0.32,
     minTapGapMs: 120, // debounce for very fast taps
-    buttonMinDp: 64,
   },
   player: {
     speed: 185, // px / s
@@ -28,6 +27,13 @@ export const ECHO_CONFIG = {
     joystickDeadZone: 0.1,
     joystickRadius: 50,
     radius: 14,
+  },
+  /** Touch gestures: a quick tap anywhere sends a pulse; a drag or a hold takes the joystick. */
+  input: {
+    tapMaxMs: 220, // a touch shorter than this (and not moved) is a tap; held longer it becomes the joystick
+    tapMaxTravelPx: 10, // moving further than this makes the touch a drag (the joystick), not a tap
+    stickRestAlpha: 0.2, // joystick opacity when idle (barely visible, just marks where it is)
+    stickActiveAlpha: 0.28, // and while a finger is steering
   },
   momentum: {
     start: 1.0,

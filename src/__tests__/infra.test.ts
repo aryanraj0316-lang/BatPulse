@@ -47,7 +47,6 @@ describe('config sanity', () => {
     expect(c.sonar.defaultCharges).toBe(3);
     expect(c.sonar.defaultRechargeSec).toBe(4);
     expect(c.sonar.tutorialRechargeSec).toBe(2);
-    expect(c.sonar.buttonMinDp).toBeGreaterThanOrEqual(64);
     expect(c.momentum).toMatchObject({ start: 1.0, step: 0.1, intervalSec: 2, max: 2.0, idleResetSec: 1.5 });
     expect(c.enemy.hearingRadiusMult).toBe(1.2);
     expect(c.door.openSec).toBe(8);

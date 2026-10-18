@@ -122,7 +122,11 @@ async function launch({ outDir, width = 390, height = 844, port = 9333, fresh = 
     exists: (testID) => h.eval(`!!document.querySelector('[data-testid="${testID}"]')`),
     // scrolls the element into view first (like a player would), then returns its centre
     clickTestId: (testID) =>
-      h.eval(`(()=>{const e=document.querySelector('[data-testid="${testID}"]');if(!e)return false;e.scrollIntoView({block:'center',inline:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`),
+      testID === 'sonar-button'
+        ? // there is no sonar button any more: a tap anywhere in the play area is the pulse. This is a spot in the
+          // bottom-left of the touch zone, away from the joystick, so older scenarios keep working.
+          h.eval(`(()=>{const e=document.querySelector('[data-testid="touch-zone"]');if(!e)return false;const r=e.getBoundingClientRect();return {x:r.x+70,y:r.bottom-120};})()`)
+        : h.eval(`(()=>{const e=document.querySelector('[data-testid="${testID}"]');if(!e)return false;e.scrollIntoView({block:'center',inline:'center'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`),
     /** Real tap (touch down + up) in the middle of an element. */
     async tapTestId(testID) {
       const p = await h.clickTestId(testID);

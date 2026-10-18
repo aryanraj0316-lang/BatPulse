@@ -102,7 +102,8 @@ const seed = () => {
     check('a pulse inside 1.2x the pulse radius alerts the hunter', s.en[0].state === 'alerted' && s.alerts === 1, `${s.en[0].state}, alerts ${s.alerts}`);
     check('the alerted hunter heads for the place the pulse was made', Math.hypot(s.en[0].tx - s.x, s.en[0].ty - s.y) < 2, `target (${s.en[0].tx.toFixed(0)},${s.en[0].ty.toFixed(0)}) vs bat (${s.x.toFixed(0)},${s.y.toFixed(0)})`);
     check('a faint sound marker appears where the pulse was made', s.marker < 0.5, `age ${s.marker}`);
-    check('the wave lit the hunter up', s.eglow > 0.5, s.eglow.toFixed(2));
+    // 110 of a 156 radius: about 70 % of the way out, so the distance falloff makes it clearly lit but not full brightness
+    check('the wave lit the hunter up (dimmer than a close wall: distance falloff)', s.eglow > 0.25 && s.eglow < 0.9, s.eglow.toFixed(2));
     await h.shot('02_alerted_marker');
     await tele(h, 60, 620); // slip away so the test can observe the visibility timing
     await sleep(1500);

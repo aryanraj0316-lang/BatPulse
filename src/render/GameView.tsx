@@ -55,7 +55,6 @@ Piece.displayName = 'Piece';
  */
 export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offsetX, offsetY, batKey, brightness, time, shakeX, shakeY, lod = lodFor('high') }) => {
   const Bat = AssetRegistry.getVisual(batKey);
-  const Pulse = AssetRegistry.getVisual('pulse_wave');
   const items = sim.world.revealables;
   const glow = sim.reveal.glow;
   const b = sim.body;
@@ -172,15 +171,9 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
     <Wall x={def.width / 2} y={wallY + 900} width={def.width + 40} height={1800} glow={1} time={time} />
   ) : null;
 
-  const waves: React.ReactNode[] = [];
-  const w = sim.waves;
-  for (let i = 0; i < w.size; i++) {
-    if (!w.active[i]) continue;
-    const p = Math.min(1, Math.max(0, w.radius[i]) / w.maxRadius[i]);
-    waves.push(
-      <Pulse key={i} x={w.ox[i]} y={w.oy[i]} width={w.maxRadius[i] * 2} height={w.maxRadius[i] * 2} progress={p} />,
-    );
-  }
+  // the expanding wave itself is NOT drawn: the player only sees what it lights up (walls fading out with distance).
+  // The wave still runs in the simulation (sim.waves) and still reveals things; `pulse_wave` stays in the registry
+  // so final art for it can be switched back on here if the design ever changes.
 
   return (
     <Svg width={screenW} height={screenH} style={{ position: 'absolute', left: 0, top: 0 }}>
@@ -188,7 +181,6 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
         {cps}
         {markers}
         {pieces}
-        {waves}
         {wallNode}
         <Bat
           x={b.x}
