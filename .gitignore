@@ -3,7 +3,8 @@ node_modules/
 dist/
 build/
 .env
-.DS_Store.e2e-out/
+.DS_Store
+.e2e-out/
 /android
 /ios
 /builds
