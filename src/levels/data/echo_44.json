@@ -202,5 +202,19 @@
   "escape": {
     "enabled": false,
     "wallSpeed": 0
-  }
+  },
+  "safeZones": [
+    {
+      "x": 40,
+      "y": 280,
+      "width": 60,
+      "height": 60
+    },
+    {
+      "x": 280,
+      "y": 280,
+      "width": 60,
+      "height": 60
+    }
+  ]
 }

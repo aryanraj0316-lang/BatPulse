@@ -180,5 +180,26 @@
   "escape": {
     "enabled": false,
     "wallSpeed": 0
-  }
+  },
+  "safeZones": [
+    {
+      "x": 20,
+      "y": 280,
+      "width": 60,
+      "height": 60
+    },
+    {
+      "x": 280,
+      "y": 420,
+      "width": 60,
+      "height": 60
+    }
+  ],
+  "hints": [
+    {
+      "text": "Green zones hide you from hunters and slowly refill your sonar.",
+      "until": "seconds",
+      "seconds": 7
+    }
+  ]
 }

@@ -65,6 +65,8 @@ const makeSnapshot = (sim: GameSim): HudSnapshot => ({
   rechargeFill: Math.round(sim.energy.rechargeFill * 20) / 20,
   mode: sim.energy.mode,
   momentum: sim.momentum.value,
+  hasKey: sim.hasKey,
+  hiddenSec: sim.hidden ? Math.ceil(sim.hideLeft * ECHO_CONFIG.safeZone.maxHideSec) : 0,
 });
 
 const sameSnapshot = (a: HudSnapshot, b: HudSnapshot) =>
@@ -72,7 +74,9 @@ const sameSnapshot = (a: HudSnapshot, b: HudSnapshot) =>
   a.charges === b.charges &&
   a.maxCharges === b.maxCharges &&
   a.rechargeFill === b.rechargeFill &&
-  a.momentum === b.momentum;
+  a.momentum === b.momentum &&
+  a.hasKey === b.hasKey &&
+  a.hiddenSec === b.hiddenSec;
 
 interface RunnerProps {
   def: LevelDef;

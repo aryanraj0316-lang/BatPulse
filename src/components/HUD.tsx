@@ -11,6 +11,10 @@ export interface HudSnapshot {
   rechargeFill: number;
   mode: 'recharge' | 'fixed';
   momentum: number;
+  /** The bat carries a key for a door that is still locked. */
+  hasKey?: boolean;
+  /** Whole seconds left in the current safe-zone stay, 0 when the bat is not hiding. */
+  hiddenSec?: number;
 }
 
 interface HUDProps {
@@ -67,6 +71,17 @@ export const HUD: React.FC<HUDProps> = React.memo(({ levelTitle, levelNumber, sn
           <Text style={styles.gaugeTitle} testID="hud-sonar">
             {snap.mode === 'fixed' ? `SONAR: ${snap.charges} / ${snap.maxCharges}` : `SONAR ${snap.charges} / ${snap.maxCharges}`}
           </Text>
+          {/* only shown when relevant: carrying a key, or hiding in a safe zone */}
+          {snap.hasKey ? (
+            <Text style={styles.keyChip} testID="hud-key">
+              🔑 KEY
+            </Text>
+          ) : null}
+          {snap.hiddenSec ? (
+            <Text style={styles.hiddenChip} testID="hud-hidden">
+              HIDDEN {snap.hiddenSec}s
+            </Text>
+          ) : null}
           <Text style={styles.momentumLabel} testID="hud-momentum">MOMENTUM ×{snap.momentum.toFixed(1)}</Text>
         </View>
         <View style={styles.nodeBar}>
@@ -83,6 +98,8 @@ export const HUD: React.FC<HUDProps> = React.memo(({ levelTitle, levelNumber, sn
 HUD.displayName = 'HUD';
 
 const styles = StyleSheet.create({
+  keyChip: { fontSize: 10, fontWeight: '900', color: '#FFD866', letterSpacing: 1 },
+  hiddenChip: { fontSize: 10, fontWeight: '900', color: '#7CFFD1', letterSpacing: 1 },
   container: { position: 'absolute', left: 14, right: 14, zIndex: 100 },
   headerBox: {
     flexDirection: 'row',

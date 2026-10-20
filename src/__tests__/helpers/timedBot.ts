@@ -47,8 +47,10 @@ export interface TimedRun {
   ghost: boolean;
 }
 
-function doorBlocksAt(world: World, doorTimer: Float32Array, di: number, tPlan: number): boolean {
-  return tPlan >= doorTimer[di];
+function doorBlocksAt(world: World, sim: GameSim, di: number, tPlan: number): boolean {
+  // a locked door blocks until its key is in hand (it then opens as the bat reaches it); a switch door by its real timer
+  const k = world.doorKey[di];
+  return k >= 0 ? !sim.keyTaken[k] : tPlan >= sim.doorTimer[di];
 }
 
 /** Plans one segment starting from the sim's current position, time and door state. Returns positions per step. */
@@ -61,7 +63,6 @@ function plan(world: World, sim: GameSim, seg: Segment, mode: EnemyMode = 'steal
   const patrolSpeeds = world.enemies.map((e) => enemyChaseSpeed(e) * ECHO_CONFIG.enemy.patrolSpeedFactor);
   const avoid = ECHO_CONFIG.enemy.senseRadius + 45; // keep well outside the hunters' sensing zones
   const t0 = sim.worldTime;
-  const doorTimer = sim.doorTimer;
   const wallY0 = sim.escapeWallY; // the rising wall on escape levels (Infinity otherwise)
   const wallSpeed = world.def.escape.enabled ? world.def.escape.wallSpeed : 0;
 
@@ -85,7 +86,7 @@ function plan(world: World, sim: GameSim, seg: Segment, mode: EnemyMode = 'steal
     // the escape wall: stay clear above it (it rises while we plan)
     if (y + WALL_R + 25 > wallY0 - wallSpeed * tp) return false;
     for (let di = 0; di < world.doors.length; di++) {
-      if (doorBlocksAt(world, doorTimer, di, tp) && distanceToBox(x, y, world.doors[di]) < WALL_R) return false;
+      if (doorBlocksAt(world, sim, di, tp) && distanceToBox(x, y, world.doors[di]) < WALL_R) return false;
     }
     {
       for (let ei = 0; ei < world.enemies.length; ei++) {
@@ -282,10 +283,12 @@ export function flyTimed(
   });
 
   // The route as legs, in the order a player meets them (rooms are stacked bottom to top):
-  // every switch (go to a spot with a clear view, pulse), every checkpoint (touch it), then the finish.
-  type Leg = { kind: 'switch'; sw: (typeof world.switches)[number]; y: number } | { kind: 'checkpoint'; x: number; y: number } | { kind: 'finish'; y: number };
+  // every switch (go to a spot with a clear view, pulse), every key (fly over it), every checkpoint (touch it), then the finish.
+  // A key is met before the door it opens, so a level places it lower down than that door.
+  type Leg = { kind: 'switch'; sw: (typeof world.switches)[number]; y: number } | { kind: 'key'; x: number; y: number } | { kind: 'checkpoint'; x: number; y: number } | { kind: 'finish'; y: number };
   const legs: Leg[] = [
     ...world.switches.map((sw): Leg => ({ kind: 'switch', sw, y: sw.y })),
+    ...world.keys.map((k): Leg => ({ kind: 'key', x: k.x, y: k.y })),
     ...def.checkpoints.map((c): Leg => ({ kind: 'checkpoint', x: c.x, y: c.y })),
   ].sort((a, b) => b.y - a.y || (a.kind === 'checkpoint' ? -1 : 1));
   legs.push({ kind: 'finish', y: world.finish.y });
@@ -322,6 +325,14 @@ export function flyTimed(
       for (let i = 0; i < 24; i++) sim.step(1 / 60);
       // the pulse must really have opened a door (otherwise the level is not solvable the way it is built)
       if (!world.doorSwitch.some((si, di) => world.switches[si] === sw && sim.doorTimer[di] > 0)) return result(false, `pulse did not trigger switch ${sw.id}`);
+    } else if (leg.kind === 'key') {
+      const kc = Math.min(cols - 1, Math.floor(leg.x / CELL));
+      const kr = Math.floor(leg.y / CELL);
+      const path = plan(world, sim, { goal: (c, r) => c === kc && r === kr, maxSteps: 400 }, mode);
+      if (!path) return result(false, `no safe route to the key at (${leg.x},${leg.y})`);
+      follow(sim, path, (path.length + 4) * 6, noisy, noiseFrom, noiseY, sprint, noiseBudget);
+      if (sim.status !== 'playing') return result(false, 'died on the way to the key');
+      if (!sim.keyTaken.some((t) => t)) return result(false, 'did not pick the key up');
     } else if (leg.kind === 'checkpoint') {
       const cc = Math.min(cols - 1, Math.floor(leg.x / CELL));
       const cr = Math.floor(leg.y / CELL);

@@ -110,6 +110,11 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
         pieces.push(<Piece key={i} visual="switch" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} active={switchLit} />);
         break;
       case 'door':
+        // a locked door (opened by a key) looks different from a switch door and shows no countdown
+        if (sim.world.doorKey[ref] >= 0) {
+          pieces.push(<Piece key={i} visual="locked_door" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} active={doorOpen} />);
+          break;
+        }
         pieces.push(
           <Piece
             key={i}
@@ -140,6 +145,9 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
         );
         break;
       }
+      case 'key':
+        if (!sim.keyTaken[ref]) pieces.push(<Piece key={i} visual="key_item" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
+        break;
       case 'pickup':
         if (!sim.pickupTaken[ref]) pieces.push(<Piece key={i} visual="pickup_charge" x={it.x + it.width / 2} y={it.y + it.height / 2} w={it.width} h={it.height} glow={g} />);
         break;
@@ -163,6 +171,22 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
     cps.push(<Piece key={`c${c}`} visual="checkpoint" x={checkpoints[c].x} y={checkpoints[c].y} w={ECHO_CONFIG.checkpoint.radius * 1.4} h={ECHO_CONFIG.checkpoint.radius * 1.4} glow={reached ? 1 : 0.35} active={reached} />);
   }
 
+  // safe zones: always faintly visible so a hunted player can find one; bright while hiding, dim while resting,
+  // and flashing when the stay is almost over
+  const zoneNodes: React.ReactNode[] = [];
+  const zones = sim.world.safeZones;
+  for (let z = 0; z < zones.length; z++) {
+    const zn = zones[z];
+    if (!isRowVisible(zn.y, zn.height, viewTop, viewBottom)) continue;
+    const hiding = sim.hidden && sim.hiddenZone === z;
+    const resting = sim.zoneCooldownLeft(z) > 0;
+    const warn = hiding && sim.hideLeft < 1 - ECHO_CONFIG.safeZone.warnFraction;
+    const zGlow = hiding ? (warn ? 0.55 + 0.45 * Math.abs(Math.sin(time * 9)) : 1) : resting ? 0.2 : 0.5;
+    zoneNodes.push(
+      <Piece key={`z${z}`} visual="safe_zone" x={zn.x + zn.width / 2} y={zn.y + zn.height / 2} w={zn.width} h={zn.height} glow={Math.round(zGlow * 16) / 16} active={hiding} progress={hiding ? Math.round(sim.hideLeft * 40) / 40 : 1} />,
+    );
+  }
+
   // the wall of darkness on escape levels is always visible: it is a warning, not a secret
   const Wall = AssetRegistry.getVisual('escape_wall');
   const def = sim.world.def;
@@ -178,10 +202,13 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
   return (
     <Svg width={screenW} height={screenH} style={{ position: 'absolute', left: 0, top: 0 }}>
       <G transform={`translate(${offsetX + shakeX} ${offsetY + shakeY}) scale(${scale})`}>
+        {zoneNodes}
         {cps}
         {markers}
         {pieces}
         {wallNode}
+        {/* a hiding bat is drawn faint: it is hidden from the hunters, and the player can see that */}
+        <G opacity={sim.hidden ? 0.4 : 1}>
         <Bat
           x={b.x}
           y={b.y}
@@ -193,6 +220,7 @@ export const GameView: React.FC<Props> = ({ sim, screenW, screenH, scale, offset
           progress={deathProgress}
           time={time}
         />
+        </G>
       </G>
       {/* keeps Svg from collapsing when nothing is lit */}
       <Rect x={0} y={0} width={1} height={1} fill="transparent" />

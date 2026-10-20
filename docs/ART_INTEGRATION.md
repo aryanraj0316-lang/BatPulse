@@ -28,6 +28,9 @@ is transparent, a freshly pinged one is fully visible). Draw them on a **transpa
 | Key | In-game size (world units; 1 unit is about 1 px on a 390 px wide phone) | Notes |
 |---|---|---|
 | `bat_rookie`, `bat_vesper`, `bat_sonarbot`, `bat_phantom`, `bat_turbo` | 34 x 34 | Top-down, nose pointing **up**. Two frames: wings up / wings down. Also shown at 92 px in the shop, so keep detail readable. |
+| `key_item` | 24 x 24 | The hidden key. Shown only while a pulse lights it. |
+| `locked_door` | same boxes as `door` (40 to 100 x 20 to 80) | A door that needs a key: must look clearly different from `door` (a padlock in the placeholder). `active` = unlocked (open); no countdown ring. |
+| `safe_zone` | 60 x 60 (3 x 3 tiles; any size of at least 36 x 36) | Always faintly visible. `active` = the bat is hiding in it, `progress` = share of the stay left (1 to 0), a low `glow` = the zone is resting. |
 | `enemy_hunter` | 32 x 32 | Top-down, facing up. Must read as dangerous at a glance; shown for 1 s when a pulse hits it. |
 | `wall_normal`, `wall_crystal`, `wall_mossy` | any rectangle (20 to 400 wide) | Stretched to the wall piece. Prefer keeping walls as vector styles (`registerWallStyle`) unless the art is a seamless stretchable edge. |
 | `spike` | usually 60 x 20 (some 40 x 20 or 40 x 40), stretched to the hazard | Reads as "touching this kills". |

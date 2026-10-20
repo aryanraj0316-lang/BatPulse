@@ -57,9 +57,38 @@ export function validateLevel(raw: unknown): string[] {
     else if (switchIds.has(s.id)) bad(`switches[${i}].id "${s.id}" is duplicated`);
     else switchIds.add(s.id);
   });
+  // optional lists: absent means none
+  const optional = (key: string): any[] => {
+    if (l[key] === undefined) return [];
+    if (!Array.isArray(l[key])) {
+      bad(`${key} must be an array`);
+      return [];
+    }
+    return l[key];
+  };
+  const keyIds = new Set<string>();
+  optional('keys').forEach((k, i) => {
+    if (!k || typeof k.id !== 'string' || !k.id || !isPt(k)) bad(`keys[${i}] invalid`);
+    else if (!inside(k)) bad(`keys[${i}] is outside the level bounds`);
+    else if (keyIds.has(k.id)) bad(`keys[${i}].id "${k.id}" is duplicated`);
+    else keyIds.add(k.id);
+  });
+  const unlockedBy = new Set<string>();
   arr('doors').forEach((d, i) => {
     if (!isRect(d) || typeof d.id !== 'string') bad(`doors[${i}] invalid`);
-    else if (!switchIds.has(d.switchId)) bad(`doors[${i}].switchId "${d.switchId}" matches no switch`);
+    else if (d.keyId !== undefined) {
+      // a locked door: opened by a key, never by a switch
+      if (d.switchId !== undefined) bad(`doors[${i}] cannot have both a switchId and a keyId`);
+      else if (!keyIds.has(d.keyId)) bad(`doors[${i}].keyId "${d.keyId}" matches no key`);
+      else if (unlockedBy.has(d.keyId)) bad(`doors[${i}]: key "${d.keyId}" already opens another door`);
+      else unlockedBy.add(d.keyId);
+    } else if (typeof d.switchId !== 'string' || !switchIds.has(d.switchId)) bad(`doors[${i}].switchId "${d.switchId}" matches no switch`);
+  });
+  for (const id of keyIds) if (!unlockedBy.has(id)) bad(`key "${id}" opens no door`);
+  optional('safeZones').forEach((z, i) => {
+    if (!isRect(z)) bad(`safeZones[${i}] is not a valid rect`);
+    else if (z.x < 0 || z.y < 0 || z.x + z.width > W || z.y + z.height > H) bad(`safeZones[${i}] is outside the level bounds`);
+    else if (z.width < 36 || z.height < 36) bad(`safeZones[${i}] is too small for the bat (needs at least 36 x 36)`);
   });
   arr('pickups').forEach((p, i) => {
     if (!isPt(p) || p.type !== 'charge') bad(`pickups[${i}] invalid`);

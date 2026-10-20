@@ -84,7 +84,16 @@
     }
   ],
   "switches": [],
-  "doors": [],
+  "doors": [
+    {
+      "id": "d_L_140_620",
+      "x": 140,
+      "y": 620,
+      "width": 100,
+      "height": 20,
+      "keyId": "k1"
+    }
+  ],
   "pickups": [
     {
       "type": "charge",
@@ -149,5 +158,26 @@
   "escape": {
     "enabled": false,
     "wallSpeed": 0
-  }
+  },
+  "keys": [
+    {
+      "id": "k1",
+      "x": 110,
+      "y": 730
+    }
+  ],
+  "safeZones": [
+    {
+      "x": 40,
+      "y": 300,
+      "width": 60,
+      "height": 60
+    },
+    {
+      "x": 280,
+      "y": 300,
+      "width": 60,
+      "height": 60
+    }
+  ]
 }

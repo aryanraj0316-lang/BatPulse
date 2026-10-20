@@ -22,7 +22,11 @@ export type SimEvent =
   | 'enemy_alert'
   | 'heartbeat'
   | 'checkpoint'
-  | 'respawn';
+  | 'respawn'
+  | 'key' // a key was picked up
+  | 'unlock' // a locked door opened
+  | 'hide' // the bat entered a safe zone
+  | 'expose'; // the safe zone's time ran out: the bat is visible again
 export type SimStatus = 'playing' | 'dying' | 'won';
 export type FailCause = 'spike' | 'hazard' | 'enemy' | 'escape_wall';
 
@@ -83,6 +87,16 @@ export class GameSim {
   readonly doorTimer: Float32Array;
   /** 1 once a pickup has been collected this attempt. */
   readonly pickupTaken: Uint8Array;
+  /** 1 once a key has been picked up this attempt (parallel to world.keys). */
+  readonly keyTaken: Uint8Array;
+  /** The bat is inside a safe zone with time left: hunters cannot see, hear or catch it. */
+  hidden = false;
+  /** Index of the safe zone the bat is hiding in, -1 when not hiding. */
+  hiddenZone = -1;
+  /** Seconds spent hiding in each zone this stay (parallel to world.safeZones). */
+  private readonly zoneStay: Float32Array;
+  /** Seconds before each zone can hide the bat again. */
+  private readonly zoneCooldown: Float32Array;
   readonly enemies: EnemySystem;
   /** 0..1: how close the nearest hunter is (heartbeat and red screen edge). */
   threat = 0;
@@ -98,7 +112,7 @@ export class GameSim {
   private inX = 0;
   private inY = 0;
   private deathTimer = 0;
-  private checkpointSnap: { worldTime: number; charges: number; doors: Float32Array; pickups: Uint8Array } | null = null;
+  private checkpointSnap: { worldTime: number; charges: number; doors: Float32Array; pickups: Uint8Array; keys: Uint8Array } | null = null;
   /** Pushes the escape wall back after a respawn so it is never right behind the bat. */
   private wallBias = 0;
   private sincePulse = Infinity;
@@ -127,6 +141,9 @@ export class GameSim {
     this.poses = world.hazards.map(() => ({ x: 0, y: 0, angle: 0 }));
     this.doorTimer = new Float32Array(world.doors.length);
     this.pickupTaken = new Uint8Array(world.pickups.length);
+    this.keyTaken = new Uint8Array(world.keys.length);
+    this.zoneStay = new Float32Array(world.safeZones.length);
+    this.zoneCooldown = new Float32Array(world.safeZones.length);
     this.doorBoxes = world.doors.map((d) => ({ x: d.x, y: d.y, width: d.width, height: d.height }));
     this.hazardReveal = world.hazards.map((_, i) => world.revealables.findIndex((r) => r.kind === 'hazard' && r.ref === i));
     this.switchDoors = world.switches.map((_, si) => world.doorSwitch.map((s, di) => (s === si ? di : -1)).filter((d) => d >= 0));
@@ -207,6 +224,8 @@ export class GameSim {
     this.hints.reset();
     this.doorTimer.fill(0);
     this.pickupTaken.fill(0);
+    this.keyTaken.fill(0);
+    this.resetSafeZones();
     this.enemies.reset();
     this.threat = 0;
     this.beatAge = 99;
@@ -230,7 +249,8 @@ export class GameSim {
     this.sincePulse = 0;
     this.pulsesUsed++;
     this.waves.spawn(this.body.x, this.body.y, this.params.pulseRadius);
-    if (this.world.enemies.length > 0) {
+    // a pulse made from inside a safe zone is not heard: that is what makes it a refuge
+    if (this.world.enemies.length > 0 && !this.hidden) {
       this.addMarker(this.body.x, this.body.y);
       // hunters hear pulses inside 1.2x the pulse radius, but not during the spawn safe window
       if (this.worldTime >= this.armedAt) this.enemies.hear(this.body.x, this.body.y, this.hearingRadius, this.closedDoors);
@@ -267,6 +287,7 @@ export class GameSim {
     this.energy.update(dt);
     this.hints.update(dt);
     this.updateDoors(dt);
+    this.unlockDoors();
 
     this.move(dt);
 
@@ -277,7 +298,9 @@ export class GameSim {
     if (speed > cfg.momentum.movingSpeed) this.hints.onMoved();
 
     this.collectPickups();
+    this.collectKeys();
     this.updateCheckpoints();
+    this.updateSafeZones(dt);
     if (this.stepEnemies(dt)) return;
     this.updateThreat(dt);
     // the escape wall kills on touch
@@ -407,6 +430,7 @@ export class GameSim {
         charges: this.energy.charges,
         doors: this.doorTimer.slice(),
         pickups: this.pickupTaken.slice(),
+        keys: this.keyTaken.slice(),
       };
       this.onEvent?.('checkpoint');
     }
@@ -444,6 +468,8 @@ export class GameSim {
     this.reveal.clear();
     this.doorTimer.set(snap.doors);
     this.pickupTaken.set(snap.pickups);
+    this.keyTaken.set(snap.keys);
+    this.resetSafeZones();
     this.enemies.reset(snap.worldTime, true);
     this.markerAge.fill(Infinity);
     this.threat = 0;
@@ -537,6 +563,114 @@ export class GameSim {
       this.rebuildClosedDoors();
       this.onEvent?.('door_close');
     }
+  }
+
+  /** True while the bat carries a key whose door is still locked (shown in the HUD). */
+  get hasKey(): boolean {
+    const dk = this.world.doorKey;
+    for (let i = 0; i < dk.length; i++) if (dk[i] >= 0 && this.keyTaken[dk[i]] && this.doorTimer[i] <= 0) return true;
+    return false;
+  }
+
+  /** 0..1: how much of the current stay in a safe zone is left (0 when not hiding). */
+  get hideLeft(): number {
+    return this.hidden ? Math.max(0, 1 - this.zoneStay[this.hiddenZone] / ECHO_CONFIG.safeZone.maxHideSec) : 0;
+  }
+
+  /** Seconds before zone `i` can hide the bat again (0 = ready). */
+  zoneCooldownLeft(i: number): number {
+    return this.zoneCooldown[i];
+  }
+
+  /** Picks keys up by touch. A key is hidden until a pulse lights it, but it can be found by flying over it. */
+  private collectKeys() {
+    const ks = this.world.keys;
+    const reach = this.body.r + ECHO_CONFIG.key.radius;
+    for (let i = 0; i < ks.length; i++) {
+      if (this.keyTaken[i]) continue;
+      if (Math.hypot(ks[i].x - this.body.x, ks[i].y - this.body.y) > reach) continue;
+      this.keyTaken[i] = 1;
+      this.onEvent?.('key');
+    }
+  }
+
+  /**
+   * A locked door opens for good as the bat reaches it with its key. Checked just before the bat moves, so the door is
+   * already open when the bat gets there and never bumps into it.
+   */
+  private unlockDoors() {
+    const dk = this.world.doorKey;
+    let opened = false;
+    for (let i = 0; i < dk.length; i++) {
+      if (dk[i] < 0 || !this.keyTaken[dk[i]] || this.doorTimer[i] > 0) continue;
+      if (!circleOverlapsBox(this.body.x, this.body.y, this.body.r + ECHO_CONFIG.key.unlockMargin, this.doorBoxes[i])) continue;
+      this.doorTimer[i] = Infinity; // never closes again
+      opened = true;
+    }
+    if (opened) {
+      this.rebuildClosedDoors();
+      this.onEvent?.('unlock');
+    }
+  }
+
+  private resetSafeZones() {
+    this.zoneStay.fill(0);
+    this.zoneCooldown.fill(0);
+    this.hidden = false;
+    this.hiddenZone = -1;
+    this.enemies.playerHidden = false;
+    this.energy.endRest();
+  }
+
+  /**
+   * Safe zones: while the bat is inside one (and it is ready) the bat is hidden, hunters lose it, and the sonar refills
+   * one charge every few seconds. A stay lasts at most `maxHideSec`; when it runs out (or the bat leaves) the zone needs
+   * a cool-down before it hides the bat again.
+   */
+  private updateSafeZones(dt: number) {
+    const zones = this.world.safeZones;
+    if (zones.length === 0) return;
+    const cfg = ECHO_CONFIG.safeZone;
+    for (let i = 0; i < zones.length; i++) if (this.zoneCooldown[i] > 0) this.zoneCooldown[i] = Math.max(0, this.zoneCooldown[i] - dt);
+
+    let inside = -1;
+    const b = this.body;
+    for (let i = 0; i < zones.length; i++) {
+      const z = zones[i];
+      if (b.x >= z.x && b.x <= z.x + z.width && b.y >= z.y && b.y <= z.y + z.height) {
+        inside = i;
+        break;
+      }
+    }
+
+    if (this.hidden && inside !== this.hiddenZone) {
+      // left the zone on purpose
+      this.zoneCooldown[this.hiddenZone] = cfg.leaveCooldownSec;
+      this.zoneStay[this.hiddenZone] = 0;
+      this.hidden = false;
+      this.hiddenZone = -1;
+      this.energy.endRest();
+    }
+    if (inside >= 0 && this.zoneCooldown[inside] <= 0) {
+      if (!this.hidden) {
+        this.hidden = true;
+        this.hiddenZone = inside;
+        this.zoneStay[inside] = 0;
+        this.onEvent?.('hide');
+      }
+      this.zoneStay[inside] += dt;
+      this.energy.rest(dt, cfg.refillSecPerCharge);
+      if (this.zoneStay[inside] >= cfg.maxHideSec) {
+        // time is up: visible again, and this zone needs a long rest
+        this.zoneCooldown[inside] = cfg.expireCooldownSec;
+        this.zoneStay[inside] = 0;
+        this.hidden = false;
+        this.hiddenZone = -1;
+        this.energy.endRest();
+        this.onEvent?.('expose');
+      }
+    }
+    this.enemies.playerHidden = this.hidden;
   }
 
   private collectPickups() {

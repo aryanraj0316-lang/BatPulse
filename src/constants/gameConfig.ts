@@ -111,6 +111,19 @@ export const ECHO_CONFIG = {
   },
   pickup: { radius: 10 },
   switch: { radius: 14 },
+  /** Keys and locked doors (higher levels): find the hidden key, then touch the door to open it for good. */
+  key: {
+    radius: 12, // how close the bat must get to pick a key up
+    unlockMargin: 6, // the bat unlocks its door this close to the door's edge (before it would bump into it)
+  },
+  /** Safe zones (higher levels): a refuge from hunters where the sonar slowly refills. */
+  safeZone: {
+    maxHideSec: 8, // longest stay: after this the bat is visible again
+    expireCooldownSec: 12, // a zone you were pushed out of is unusable for this long
+    leaveCooldownSec: 2, // and for this long after you leave it yourself (stops in-and-out flicker)
+    refillSecPerCharge: 2.5, // seconds inside for each sonar charge that comes back
+    warnFraction: 0.75, // the zone starts flashing when this share of the stay has passed
+  },
   hazards: {
     sliderLoopSecMin: 2,
     sliderLoopSecMax: 4,

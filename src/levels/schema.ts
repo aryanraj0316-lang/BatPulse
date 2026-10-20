@@ -33,9 +33,19 @@ export interface SwitchDef {
 }
 export interface DoorDef extends LevelRect {
   id: string;
-  /** id of the switch that opens this door */
-  switchId: string;
+  /** id of the switch that opens this door for a few seconds. Absent on a locked door. */
+  switchId?: string;
+  /** Locked door: opens for good when the bat touches it while carrying the key with this id. */
+  keyId?: string;
 }
+/** A hidden key. Picking it up lets the bat unlock the door with the same `keyId`. */
+export interface KeyDef {
+  id: string;
+  x: number;
+  y: number;
+}
+/** A refuge: while the bat is inside, hunters cannot see or hear it and its sonar slowly refills. */
+export type SafeZoneDef = LevelRect;
 export interface PickupDef {
   type: 'charge';
   x: number;
@@ -70,6 +80,9 @@ export interface LevelDef {
   switches: SwitchDef[];
   doors: DoorDef[];
   pickups: PickupDef[];
+  /** Optional: levels without keys or safe zones simply leave these out. */
+  keys?: KeyDef[];
+  safeZones?: SafeZoneDef[];
   enemies: EnemyDef[];
   checkpoints: CheckpointDef[];
   sonar: SonarDef;

@@ -123,6 +123,11 @@ export class EnemySystem {
   /** Nearest hunter distance this step (Infinity when none). */
   nearest = Infinity;
   alertCount = 0;
+  /**
+   * The bat is inside a safe zone: hunters cannot see or catch it. Any hunter that was chasing gives up and searches the
+   * place where it last saw the bat (and then goes back to its route), so it never learns the bat is hiding.
+   */
+  playerHidden = false;
   /** At most this many route searches per step, so several hunters never pile into one slow frame. */
   private planBudget = 0;
   /** Route searches done since creation (tests and profiling). */
@@ -166,6 +171,7 @@ export class EnemySystem {
   reset(t: number = 0, keepAlerts: boolean = false): void {
     if (!keepAlerts) this.alertCount = 0;
     this.nearest = Infinity;
+    this.playerHidden = false;
     for (const e of this.enemies) {
       const info = patrolInfo(e.def, t, e.patrolSpeed, this.scratch);
       e.body.x = info.x;
@@ -221,7 +227,7 @@ export class EnemySystem {
       const dist = Math.hypot(px - b.x, py - b.y);
       const sight = !NavGrid.sightBlocked(solids, closedDoors, b.x, b.y, px, py);
 
-      if (armed) {
+      if (armed && !this.playerHidden) {
         // direct sensing, from any calm or searching state
         if ((e.state === 'patrol' || e.state === 'lost' || e.state === 'alerted') && sight && dist < cfg.senseRadius) {
           this.startChase(e, i);
@@ -241,6 +247,11 @@ export class EnemySystem {
           if (Math.hypot(e.tx - b.x, e.ty - b.y) < 14) this.beginSearch(e);
           break;
         case 'chase': {
+          if (this.playerHidden) {
+            // the bat vanished into a safe zone: search where it was last seen
+            this.beginSearch(e);
+            break;
+          }
           e.tx = px;
           e.ty = py;
           e.noSight = sight ? 0 : e.noSight + dt;
@@ -269,7 +280,7 @@ export class EnemySystem {
 
       const d2 = Math.hypot(px - b.x, py - b.y);
       if (d2 < this.nearest) this.nearest = d2;
-      if (armed && d2 < b.r + pr * 0.8) caught = true;
+      if (armed && !this.playerHidden && d2 < b.r + pr * 0.8) caught = true;
     }
     return caught;
   }

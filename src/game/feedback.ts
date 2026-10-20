@@ -28,6 +28,11 @@ export const FEEDBACK: Record<SimEvent, Feedback | null> = {
   door_close: { sound: { key: 'sfx_door', gain: 0.5 } },
   pickup: { sound: { key: 'sfx_switch', gain: 0.8 }, haptic: 'pickup' }, // no dedicated pickup sound yet: the click doubles as the chime
   finish: { sound: { key: 'sfx_finish', gain: 1 }, haptic: 'victory' },
+  // keys and safe zones reuse existing sounds until dedicated ones exist (see docs/ART_INTEGRATION.md)
+  key: { sound: { key: 'sfx_switch', gain: 0.9 }, haptic: 'pickup' },
+  unlock: { sound: { key: 'sfx_door', gain: 1 }, haptic: 'bump' },
+  hide: { sound: { key: 'sfx_door', gain: 0.4 }, haptic: 'bump' },
+  expose: { sound: { key: 'sfx_enemy_alert', gain: 0.6 }, haptic: 'alert' }, // your cover is running out / gone
 };
 
 /** The feedback for an event right now. The heartbeat gets louder as the hunter gets closer (threat 0..1). */

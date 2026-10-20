@@ -12,6 +12,7 @@ export interface SonarEnergyRules {
 export class SonarEnergy {
   private count: number;
   private timer = 0; // seconds into the current recharge
+  private restTimer = 0; // seconds spent resting in a safe zone towards the next charge
 
   constructor(private rules: SonarEnergyRules) {
     this.count = rules.charges;
@@ -57,14 +58,41 @@ export class SonarEnergy {
     if (this.count >= this.rules.charges) this.timer = 0;
   }
 
+  /**
+   * Resting in a safe zone: one charge comes back every `secPerCharge` seconds, in both modes, never above max.
+   * Returns how many charges were added this call.
+   */
+  rest(dt: number, secPerCharge: number): number {
+    if (this.count >= this.rules.charges || !(secPerCharge > 0)) {
+      this.restTimer = 0;
+      return 0;
+    }
+    this.restTimer += dt;
+    let added = 0;
+    while (this.restTimer >= secPerCharge && this.count < this.rules.charges) {
+      this.restTimer -= secPerCharge;
+      this.count++;
+      added++;
+    }
+    if (this.count >= this.rules.charges) this.restTimer = 0;
+    return added;
+  }
+
+  /** Leaving the safe zone: the partly filled rest charge is lost (no banking progress across visits). */
+  endRest(): void {
+    this.restTimer = 0;
+  }
+
   /** Puts the charge count back to a saved value (checkpoint respawn). */
   restore(count: number): void {
     this.count = Math.max(0, Math.min(this.rules.charges, count));
     this.timer = 0;
+    this.restTimer = 0;
   }
 
   reset(): void {
     this.count = this.rules.charges;
     this.timer = 0;
+    this.restTimer = 0;
   }
 }

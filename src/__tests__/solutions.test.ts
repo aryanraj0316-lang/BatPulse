@@ -33,7 +33,7 @@ function build(): string {
     const loudNotes: Record<number, string> = {};
     for (const id of authoredLevelIds().filter((i) => i >= ch.first && i <= ch.last).sort((a, b) => a - b)) {
       const def = loadAuthoredLevel(id, true)!;
-      const dynamic = def.movingHazards.length > 0 || def.switches.length > 0 || def.enemies.length > 0;
+      const dynamic = def.movingHazards.length > 0 || def.switches.length > 0 || def.enemies.length > 0 || (def.keys ?? []).length > 0;
       let time: number;
       let pulses = 0;
       let trace = '';
@@ -79,6 +79,8 @@ function build(): string {
       if (def.walls.some((w) => w.type === 'crystal')) el.push('crystal');
       if (def.walls.some((w) => w.type === 'mossy')) el.push('mossy');
       if (def.switches.length) el.push(`${def.switches.length} switch/door`);
+      if ((def.keys ?? []).length) el.push('key + locked door');
+      if ((def.safeZones ?? []).length) el.push(`${def.safeZones!.length} safe zone${def.safeZones!.length > 1 ? 's' : ''}`);
       if (def.enemies.length) el.push(`${def.enemies.length} hunter${def.enemies.length > 1 ? 's' : ''} (${[...new Set(def.enemies.map((e) => e.speed))].join('/')})`);
       if (def.pickups.length) el.push(`${def.pickups.length} pickup`);
       const sonar = def.sonar.mode === 'fixed' ? `fixed ${def.sonar.charges}` : `${def.sonar.charges} / ${def.sonar.rechargeSec}s`;

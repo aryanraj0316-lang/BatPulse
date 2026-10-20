@@ -230,7 +230,7 @@ describe('cave reverb', () => {
 
 /* ------------------------------------------------------------------ feedback table */
 describe('sound and haptic wiring', () => {
-  const EVENTS = ['restart', 'respawn', 'pulse', 'no_charge', 'wall_hit', 'death', 'enemy_alert', 'heartbeat', 'switch', 'checkpoint', 'door_open', 'door_close', 'pickup', 'finish'];
+  const EVENTS = ['restart', 'respawn', 'pulse', 'no_charge', 'wall_hit', 'death', 'enemy_alert', 'heartbeat', 'switch', 'checkpoint', 'door_open', 'door_close', 'pickup', 'finish', 'key', 'unlock', 'hide', 'expose'];
 
   it('lists exactly the simulation events', () => {
     expect(Object.keys(FEEDBACK).sort()).toEqual([...EVENTS].sort());

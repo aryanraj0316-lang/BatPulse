@@ -17,6 +17,11 @@
       "text": "Green rings are checkpoints. If you die you return to the last one.",
       "until": "seconds",
       "seconds": 9
+    },
+    {
+      "text": "A purple door is locked. Pulse to find the hidden key, then fly to the door.",
+      "until": "seconds",
+      "seconds": 8
     }
   ],
   "chapter": 3,
@@ -95,11 +100,11 @@
 ####...........####
 ####.....k.....####
 ####...........####
-#######.....#######
+#######LLLLL#######
 ######.......######
 ######.......######
 ######.......######
-######.......######
+######.K.....######
 ######.......######
 ######.......######
 ######.......######

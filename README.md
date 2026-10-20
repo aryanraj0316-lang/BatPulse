@@ -36,7 +36,7 @@ LOUD_SEARCH=44 npx jest --testMatch "**/loudSearch.tool.ts"   # search a loud so
 | `src/game/feedback.ts` | The one table that maps gameplay events to sounds and vibrations |
 | `src/analytics/`, `src/debug/` | Event hooks; debug-only tools (dev builds) |
 | `tools/` | Level build tool and the browser end-to-end harness |
-| `docs/` | `TEST_DEVICES.md` (tiers, budget), `LEVEL_SOLUTIONS.md` (generated), `ECONOMY.md`, `ONLINE_BACKEND.md` (server contract), `ART_INTEGRATION.md` (final art/audio specs), `RELEASE_CHECKLIST.md` (beta and release) |
+| `docs/` | `TEST_DEVICES.md` (tiers, budget), `LEVEL_SOLUTIONS.md` (generated), `ECONOMY.md`, `ONLINE_BACKEND.md` (server contract), `ART_INTEGRATION.md` (final art/audio specs), `RELEASE_CHECKLIST.md` (beta and release), `KEYS_AND_SAFE_ZONES.md` (keys, locked doors, safe zones) |
 
 ## Adding a level
 

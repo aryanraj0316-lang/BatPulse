@@ -229,6 +229,55 @@ const Checkpoint: React.FC<VisualProps> = (p) => {
   return <Circle cx={p.x} cy={p.y} r={r} stroke="#5CFF9D" strokeWidth={p.active ? 3 : 1.8} fill="none" opacity={glowOf(p)} />;
 };
 
+/** A hidden key: a small gold key, lit only while a pulse shows it. */
+const KeyItem: React.FC<VisualProps> = (p) => {
+  const s = Math.min(p.width, p.height);
+  const bow = s * 0.2;
+  const left = p.x - s * 0.34;
+  return (
+    <G opacity={glowOf(p)}>
+      <Circle cx={left} cy={p.y} r={bow} stroke="#FFD866" strokeWidth={2} fill="#FFB000" fillOpacity={0.35} />
+      <Line x1={left + bow} y1={p.y} x2={p.x + s * 0.4} y2={p.y} stroke="#FFD866" strokeWidth={2.2} />
+      <Line x1={p.x + s * 0.2} y1={p.y} x2={p.x + s * 0.2} y2={p.y + s * 0.2} stroke="#FFD866" strokeWidth={2.2} />
+      <Line x1={p.x + s * 0.4} y1={p.y} x2={p.x + s * 0.4} y2={p.y + s * 0.26} stroke="#FFD866" strokeWidth={2.2} />
+    </G>
+  );
+};
+
+/** A door that needs a key: purple, with a padlock. Open (active) = dashed outline and no lock. */
+const LockedDoor: React.FC<VisualProps> = (p) => {
+  const open = !!p.active;
+  const lock = Math.min(p.width, p.height, 26) * 0.5;
+  return (
+    <G opacity={glowOf(p)}>
+      <Rect {...rect(p)} fill={open ? 'none' : '#7A3CFF'} fillOpacity={0.75} stroke="#C9A8FF" strokeWidth={2} strokeDasharray={open ? '4 4' : undefined} />
+      {!open && (
+        <G>
+          <Path d={`M${p.x - lock * 0.45},${p.y - lock * 0.1} v${-lock * 0.3} a${lock * 0.45},${lock * 0.45} 0 0 1 ${lock * 0.9},0 v${lock * 0.3}`} stroke="#FFFFFF" strokeWidth={1.8} fill="none" />
+          <Rect x={p.x - lock * 0.6} y={p.y - lock * 0.1} width={lock * 1.2} height={lock * 0.9} rx={2} fill="#FFFFFF" fillOpacity={0.9} />
+        </G>
+      )}
+    </G>
+  );
+};
+
+/**
+ * A refuge. Always faintly visible (like a checkpoint) so it can be found in the dark. `active` = the bat is hiding in it,
+ * `progress` = how much of the stay is left; a dim, dashed zone is resting and cannot hide the bat yet.
+ */
+const SafeZone: React.FC<VisualProps> = (p) => {
+  const hiding = !!p.active;
+  const left = Math.max(0, Math.min(1, p.progress ?? 1));
+  const r = rect(p);
+  return (
+    <G opacity={glowOf(p)}>
+      <Rect {...r} rx={6} fill="#7CFFD1" fillOpacity={hiding ? 0.16 : 0.06} stroke="#7CFFD1" strokeWidth={hiding ? 2.4 : 1.6} strokeDasharray={hiding ? undefined : '5 4'} />
+      <Path d={`M${p.x - p.width * 0.22},${p.y + p.height * 0.28} v${-p.height * 0.32} a${p.width * 0.22},${p.width * 0.22} 0 0 1 ${p.width * 0.44},0 v${p.height * 0.32}`} stroke="#7CFFD1" strokeWidth={1.6} fill="none" opacity={0.8} />
+      {hiding && <Rect x={r.x + 3} y={r.y + r.height - 6} width={Math.max(0, (r.width - 6) * left)} height={3} fill="#7CFFD1" />}
+    </G>
+  );
+};
+
 const EnemyHunter: React.FC<VisualProps> = (p) => {
   const r = Math.min(p.width, p.height) / 2;
   return (
@@ -318,6 +367,9 @@ export function registerPlaceholderAssets(): void {
     pickup_charge: PickupCharge,
     finish: Finish,
     checkpoint: Checkpoint,
+    key_item: KeyItem,
+    locked_door: LockedDoor,
+    safe_zone: SafeZone,
     enemy_hunter: EnemyHunter,
     pulse_wave: PulseWave,
     sound_marker: SoundMarker,

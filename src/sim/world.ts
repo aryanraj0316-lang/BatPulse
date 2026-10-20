@@ -1,8 +1,8 @@
-import { DoorDef, EnemyDef, LevelDef, MovingHazardDef, PickupDef, SwitchDef, WallType } from '../levels/schema';
+import { DoorDef, EnemyDef, KeyDef, LevelDef, MovingHazardDef, PickupDef, SafeZoneDef, SwitchDef, WallType } from '../levels/schema';
 import { ECHO_CONFIG } from '../constants/gameConfig';
 import { Box } from './collision';
 
-export type RevealKind = 'wall' | 'spike' | 'finish' | 'hazard' | 'switch' | 'door' | 'pickup' | 'enemy';
+export type RevealKind = 'wall' | 'spike' | 'finish' | 'hazard' | 'switch' | 'door' | 'pickup' | 'key' | 'enemy';
 
 /** Something a pulse can light up. Static: built once per level load. */
 export interface Revealable extends Box {
@@ -26,7 +26,11 @@ export interface World {
   /** Index of the switch each door listens to (parallel to doors). */
   doors: DoorDef[];
   doorSwitch: number[];
+  /** Index of the key that unlocks each door (parallel to doors), -1 for doors a switch opens. */
+  doorKey: number[];
   pickups: PickupDef[];
+  keys: KeyDef[];
+  safeZones: SafeZoneDef[];
   enemies: EnemyDef[];
 }
 
@@ -86,6 +90,9 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
   def.doors.forEach((d, i) => revealables.push({ x: d.x, y: d.y, width: d.width, height: d.height, kind: 'door', variant: 'normal', ref: i }));
   const pr = ECHO_CONFIG.pickup.radius;
   def.pickups.forEach((p, i) => revealables.push({ x: p.x - pr, y: p.y - pr, width: pr * 2, height: pr * 2, kind: 'pickup', variant: 'normal', ref: i }));
+  // keys are hidden until a pulse reaches them
+  const kr = ECHO_CONFIG.key.radius;
+  (def.keys ?? []).forEach((k, i) => revealables.push({ x: k.x - kr, y: k.y - kr, width: kr * 2, height: kr * 2, kind: 'key', variant: 'normal', ref: i }));
   const er = ECHO_CONFIG.enemy.radius;
   def.enemies.forEach((e, i) =>
     revealables.push({ x: e.waypoints[0].x - er, y: e.waypoints[0].y - er, width: er * 2, height: er * 2, kind: 'enemy', variant: 'normal', ref: i }),
@@ -99,7 +106,9 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
     kind: 'finish',
     variant: 'normal',
   });
-  const doorSwitch = def.doors.map((d) => def.switches.findIndex((sw) => sw.id === d.switchId));
+  const doorSwitch = def.doors.map((d) => (d.switchId === undefined ? -1 : def.switches.findIndex((sw) => sw.id === d.switchId)));
+  const keys = def.keys ?? [];
+  const doorKey = def.doors.map((d) => (d.keyId === undefined ? -1 : keys.findIndex((k) => k.id === d.keyId)));
   return {
     def,
     solids,
@@ -110,7 +119,10 @@ export function buildWorld(def: LevelDef, segmentLen: number, edge: number = ECH
     switches: def.switches,
     doors: def.doors,
     doorSwitch,
+    doorKey,
     pickups: def.pickups,
+    keys,
+    safeZones: def.safeZones ?? [],
     enemies: def.enemies,
   };
 }
