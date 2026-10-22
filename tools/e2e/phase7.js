@@ -149,7 +149,7 @@ async function drag(h, x, y, dy, ms) {
     await sleep(3200);
     s = await st(h);
     check('the sonar refills while hiding (one charge about every 2.5 s)', s.charges >= c0 + 1, `${c0} -> ${s.charges}`);
-    check('the HUD shows the new sonar count', new RegExp(`SONAR: ${s.charges} / 5`).test((await text(h, 'hud-sonar')) || ''), (await text(h, 'hud-sonar')) || '');
+    check('the HUD shows the new sonar count', new RegExp(`${s.charges} / 5`).test((await text(h, 'hud-sonar')) || ''), (await text(h, 'hud-sonar')) || '');
 
     await sleep(5500); // past the 8 s limit
     s = await st(h);

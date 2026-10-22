@@ -67,7 +67,10 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     await sleep(2500);
     let s = await state(h);
     check('splash goes directly to Echo 01', s && s.id === 1, JSON.stringify(s && s.id));
-    check('HUD shows level id and name', (await h.text('game-screen')).includes('ECHO 01') && (await h.text('game-screen')).includes('FIRST ECHO'));
+    check('the HUD shows the level number', (await h.text('game-screen')).includes('ECHO 01'));
+    // the HUD is ONE line: every part (level, time, sonar, momentum, restart, pause) sits at the same height, in a bar under 50 px
+    const hudBox = await h.eval(`(()=>{const q=(id)=>document.querySelector('[data-testid="'+id+'"]').getBoundingClientRect();const ids=['hud-time','hud-sonar','hud-momentum','btn-restart','btn-pause'];const r=ids.map(q);const top=Math.min(...r.map(x=>x.top));const bottom=Math.max(...r.map(x=>x.bottom));const centres=r.map(x=>x.top+x.height/2);return {height:bottom-top,spread:Math.max(...centres)-Math.min(...centres),bottom};})()`);
+    check('the HUD is a single compact line', hudBox.height < 50 && hudBox.spread < 12, JSON.stringify(hudBox));
     check('first hint (move) is shown', (await h.text('hint-text')) === 'Drag anywhere to fly', await h.text('hint-text'));
     check('3 sonar charges at start', s.charges === 3 && (await h.text('hud-sonar')).includes('3 / 3'), await h.text('hud-sonar'));
     check('momentum starts at x1.0', (await h.text('hud-momentum')).includes('1.0'));
@@ -75,7 +78,7 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     // ---- no sonar button: the whole play area takes touches, the joystick is barely visible
     check('there is no SONAR button on screen', !(await h.exists('sonar-button')) && !(await h.eval(`[...document.querySelectorAll('div,span')].some(e=>e.children.length===0&&e.textContent.trim()==='SONAR')`)));
     const zone = await h.eval(`(()=>{const e=document.querySelector('[data-testid="touch-zone"]');const r=e.getBoundingClientRect();return {w:r.width,h:r.height,top:r.top};})()`);
-    check('one touch zone covers the whole play area below the HUD', zone.w >= 380 && zone.top < 150 && zone.top > 60, JSON.stringify(zone));
+    check('one touch zone covers the whole play area below the HUD', zone.w >= 380 && zone.top < 80 && zone.top > 40, JSON.stringify(zone));
     const alpha = await h.eval(`parseFloat(getComputedStyle(document.querySelector('[data-testid="stick-visual"]')).opacity)`);
     check('the joystick is drawn at low opacity (0.15 to 0.25)', alpha >= 0.15 && alpha <= 0.25, String(alpha));
 
@@ -98,8 +101,11 @@ async function autopilot(h, def, { timeoutMs = 60000 } = {}) {
     await h.touch('touchMove', [{ id: 1, x: 350, y: 600 }]); // steer right (away from the top wall)
     await sleep(500);
     await h.touch('touchStart', [{ id: 1, x: 350, y: 600 }, { id: 2, x: sonar.x, y: sonar.y }]);
-    await sleep(50);
-    await h.touch('touchEnd', [{ id: 2, x: sonar.x, y: sonar.y }]); // the other thumb lifts: a quick tap = pulse, the stick finger stays down
+    await sleep(120);
+    // the pulse is sent the moment the second thumb touches down: the stick thumb is still down AND the other thumb is still down
+    const down = await state(h);
+    check('the second thumb pulses on touch-down, before it is lifted (both thumbs down at once)', down.pulses === 1, `pulses ${down.pulses}`);
+    await h.touch('touchEnd', [{ id: 2, x: sonar.x, y: sonar.y }]); // the other thumb lifts: nothing more is sent, the stick finger stays down
     await sleep(120);
     const both = await state(h);
     check('a tap with the other thumb sends a pulse while the stick is held (multi-touch)', both.pulses === 1 && both.charges === 2, `pulses ${both.pulses}, charges ${both.charges}`);

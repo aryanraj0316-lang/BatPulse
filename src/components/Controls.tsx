@@ -1,9 +1,8 @@
 import React, { useEffect } from 'react';
 import { GestureResponderEvent, StyleSheet, View } from 'react-native';
 import { TouchInput } from '../input/TouchInput';
+import { HUD_HEIGHT } from './HUD';
 
-/** Space reserved for the HUD at the top (the stick zone starts below it). */
-const HUD_HEIGHT = 120;
 
 interface Props {
   input: TouchInput;

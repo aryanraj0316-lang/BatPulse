@@ -5,7 +5,7 @@ import { Analytics } from '../analytics/Analytics';
 import { VisualKey } from '../assets/keys';
 import { audio } from '../audio';
 import { Controls } from '../components/Controls';
-import { HUD, HudSnapshot } from '../components/HUD';
+import { HUD, HUD_HEIGHT, HudSnapshot } from '../components/HUD';
 import { HintBanner, StickVisual } from '../components/Overlays';
 import { FailScreen } from '../components/FailScreen';
 import { PauseMenu } from '../components/PauseMenu';
@@ -34,7 +34,6 @@ import { useProgressStore } from '../state/progressStore';
 import { useSettingsStore } from '../state/settingsStore';
 
 /** Space the HUD occupies at the top; the level is fitted into the area below it. */
-const HUD_HEIGHT = 120;
 
 interface GameScreenProps {
   levelId: number;

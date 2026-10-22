@@ -45,7 +45,7 @@ export const StickVisual: React.FC<{ input: TouchInput; restX: number; restY: nu
 export const HintBanner: React.FC<{ text: string | null; topInset: number }> = ({ text, topInset }) => {
   if (!text) return null;
   return (
-    <View style={[styles.hintWrap, { top: topInset + 128 }]} pointerEvents="none">
+    <View style={[styles.hintWrap, { top: topInset + 62 }]} pointerEvents="none">
       <Text style={styles.hint} testID="hint-text">
         {text}
       </Text>

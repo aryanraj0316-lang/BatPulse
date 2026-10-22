@@ -196,39 +196,91 @@ describe('hold = joystick', () => {
   });
 });
 
-describe('two thumbs', () => {
-  it('a tap with a second finger sends a pulse while the first steers, without disturbing the stick', () => {
+describe('two thumbs: steer with one, sonar with the other, at the same time', () => {
+  it('a second finger sends a pulse the moment it touches down, while the first keeps steering', () => {
     const r = rig();
     r.input.touchStart(1, 300, 600);
     r.input.touchMove(1, 340, 600);
     const before = { ...r.input.stick };
     r.input.touchStart(2, 80, 500); // the other thumb
-    r.advance(50);
-    r.input.touchEnd(2);
-    expect(r.pulses()).toBe(1);
+    expect(r.pulses()).toBe(1); // on touch-down: nothing to wait for
     expect(r.input.active).toBe(true);
     expect(r.input.stick).toEqual(before);
+    r.advance(50);
+    r.input.touchEnd(2);
+    expect(r.pulses()).toBe(1); // lifting sends nothing more
     r.input.touchMove(1, 340, 600);
     expect(r.input.stick.x).toBeGreaterThan(0.5);
   });
 
-  it('a second finger that drags or holds cannot steal the stick, and sends no pulse', () => {
+  it('the pulse thumb may wobble, slide or rest as long as it likes: it still pulsed once and never touches the stick', () => {
     const r = rig();
     r.input.touchStart(1, 300, 600);
     r.input.touchMove(1, 340, 600);
     const before = { ...r.input.stick };
     r.input.touchStart(2, 80, 500);
-    r.input.touchMove(2, 80, 400); // drags: would be a stick, but the stick is taken
+    r.input.touchMove(2, 80, 400); // drags a long way
     r.input.touchMove(2, 200, 300);
     expect(r.input.stick).toEqual(before);
     expect(r.input.originX).toBe(300);
     r.input.touchEnd(2);
-    expect(r.pulses()).toBe(0);
+    expect(r.pulses()).toBe(1);
     r.input.touchStart(3, 60, 700);
-    r.advance(TAP_MS + 50); // held: also ignored
+    expect(r.pulses()).toBe(2); // a new touch is a new pulse
+    r.advance(TAP_MS + 500); // held for a long time: no extra pulse, no stick
     expect(r.input.originX).toBe(300);
+    expect(r.pulses()).toBe(2);
     r.input.touchEnd(3);
+    expect(r.pulses()).toBe(2);
+  });
+
+  it('every extra finger taps its own pulse (rapid alternating taps while steering)', () => {
+    const r = rig();
+    r.input.touchStart(1, 300, 600);
+    r.input.touchMove(1, 340, 600);
+    for (let i = 0; i < 6; i++) {
+      r.input.touchStart(10 + i, 80, 500);
+      r.advance(30);
+      r.input.touchEnd(10 + i);
+      r.advance(30);
+    }
+    expect(r.pulses()).toBe(6);
+    expect(r.input.active).toBe(true);
+    expect(r.input.stick.x).toBeGreaterThan(0.5);
+  });
+
+  it('the steering finger can lift while the pulse finger is still down, without a stray pulse', () => {
+    const r = rig();
+    r.input.touchStart(1, 300, 600);
+    r.input.touchMove(1, 340, 600);
+    r.input.touchStart(2, 80, 500);
+    expect(r.pulses()).toBe(1);
+    r.input.touchEnd(1);
+    expect(r.input.active).toBe(false);
+    expect(r.pulses()).toBe(1);
+    r.input.touchMove(2, 90, 480);
+    r.input.touchEnd(2);
+    expect(r.pulses()).toBe(1);
+  });
+
+  it('when nobody is steering yet, a quick tap still pulses on release (and does not steer)', () => {
+    const r = rig();
+    r.input.touchStart(1, 100, 400);
     expect(r.pulses()).toBe(0);
+    r.advance(60);
+    r.input.touchEnd(1);
+    expect(r.pulses()).toBe(1);
+    expect(r.input.active).toBe(false);
+  });
+
+  it('works through the Android touch model: every pointer of a gesture is reported to the first finger view', () => {
+    // React Native on Android sends all pointers to the view the first finger touched. That is why the game has ONE
+    // touch zone: whichever thumb goes down first, the other thumb's events reach the same handler.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'components', 'Controls.tsx'), 'utf8');
+    expect(src.match(/testID="touch-zone"/g)).toHaveLength(1);
+    expect(src.match(/onTouchStart:/g)).toHaveLength(1); // one handler set, no second view with its own touch handlers
+    const screen = fs.readFileSync(path.join(__dirname, '..', 'screens', 'GameScreen.tsx'), 'utf8');
+    expect(screen).not.toMatch(/onTouchStart|onPressIn|onStartShouldSetResponder/);
   });
 
   it('after the first finger lifts, the next drag can take the stick', () => {
@@ -257,17 +309,18 @@ describe('robustness', () => {
     expect(r.pulses()).toBe(1);
   });
 
-  it('cancelAll (a call, the notification shade) releases everything, cancels timers and sends no pulse', () => {
+  it('cancelAll (a call, the notification shade) releases everything, cancels timers and sends no extra pulse', () => {
     const r = rig();
     r.input.touchStart(1, 300, 600);
     r.input.touchMove(1, 340, 600);
-    r.input.touchStart(2, 80, 500);
+    r.input.touchStart(2, 80, 500); // the sonar thumb: one pulse, at touch-down
+    expect(r.pulses()).toBe(1);
     r.input.cancelAll();
     expect(r.input.active).toBe(false);
     expect(r.input.stick).toEqual({ x: 0, y: 0, mag: 0 });
     expect(r.liveTimers()).toBe(0);
     r.input.touchEnd(2); // the system may still report the lift afterwards
-    expect(r.pulses()).toBe(0);
+    expect(r.pulses()).toBe(1);
   });
 
   it('the same finger id can be used again after a cancel', () => {

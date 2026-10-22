@@ -34,6 +34,13 @@ export const formatTime = (sec: number): string => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
+/** Height of the one-line HUD plus a small gap; the play area starts below this (shared with the touch zone). */
+export const HUD_HEIGHT = 56;
+
+/**
+ * One compact line: level number, timer, sonar charges (bars and count), momentum, key / hiding chips, restart and pause.
+ * The level's name is not shown here (it is on the result card).
+ */
 export const HUD: React.FC<HUDProps> = React.memo(({ levelTitle, levelNumber, snap, onPause, onRestart, topInset }) => {
   const segments = Array.from({ length: snap.maxCharges }, (_, i) => {
     if (i < snap.charges) return 1;
@@ -42,19 +49,46 @@ export const HUD: React.FC<HUDProps> = React.memo(({ levelTitle, levelNumber, sn
   });
 
   return (
-    <View style={[styles.container, { top: topInset + 8 }]} pointerEvents="box-none">
-      <View style={styles.headerBox}>
-        <View style={styles.titleColumn}>
-          <Text style={styles.levelTag}>ECHO {levelNumber.toString().padStart(2, '0')}</Text>
-          <Text style={styles.levelTitle} numberOfLines={1}>
-            {levelTitle.toUpperCase()}
+    <View style={[styles.container, { top: topInset + 6 }]} pointerEvents="box-none">
+      <View style={styles.bar} accessibilityLabel={levelTitle}>
+        <Text style={styles.levelTag} numberOfLines={1}>
+          ECHO {levelNumber.toString().padStart(2, '0')}
+        </Text>
+        <Text style={styles.timeValue} testID="hud-time">
+          {formatTime(snap.elapsedSec)}
+        </Text>
+
+        {/* sonar charges: the bars shrink first when the line is tight */}
+        <View style={styles.sonar}>
+          <View style={styles.nodeBar}>
+            {segments.map((fill, i) => (
+              <View key={i} style={styles.node}>
+                <View style={[styles.nodeFill, { width: `${Math.round(fill * 100)}%`, opacity: fill >= 1 ? 1 : 0.55 }]} />
+              </View>
+            ))}
+          </View>
+          <Text style={styles.gaugeTitle} testID="hud-sonar" accessibilityLabel="Sonar charges" numberOfLines={1}>
+            {snap.charges} / {snap.maxCharges}
           </Text>
         </View>
 
-        <View style={styles.timeBox}>
-          <Text style={styles.timeLabel}>TIME</Text>
-          <Text style={styles.timeValue} testID="hud-time">{formatTime(snap.elapsedSec)}</Text>
-        </View>
+        {/* only shown when relevant: carrying a key, or hiding in a safe zone */}
+        {snap.hasKey ? (
+          <Text style={styles.keyChip} testID="hud-key">
+            🔑
+          </Text>
+        ) : null}
+        {snap.hiddenSec ? (
+          <Text style={styles.hiddenChip} testID="hud-hidden">
+            HIDDEN {snap.hiddenSec}s
+          </Text>
+        ) : null}
+        {/* while hiding the bat is (nearly) still and its momentum is not in play: the room goes to the sonar bars */}
+        {snap.hiddenSec ? null : (
+          <Text style={styles.momentumLabel} testID="hud-momentum">
+            ×{snap.momentum.toFixed(1)}
+          </Text>
+        )}
 
         <View style={styles.actions}>
           <TouchableOpacity style={styles.hudButton} onPress={onRestart} activeOpacity={0.7} accessibilityLabel="Restart" testID="btn-restart">
@@ -65,63 +99,39 @@ export const HUD: React.FC<HUDProps> = React.memo(({ levelTitle, levelNumber, sn
           </TouchableOpacity>
         </View>
       </View>
-
-      <View style={styles.gaugeContainer}>
-        <View style={styles.gaugeHeader}>
-          <Text style={styles.gaugeTitle} testID="hud-sonar">
-            {snap.mode === 'fixed' ? `SONAR: ${snap.charges} / ${snap.maxCharges}` : `SONAR ${snap.charges} / ${snap.maxCharges}`}
-          </Text>
-          {/* only shown when relevant: carrying a key, or hiding in a safe zone */}
-          {snap.hasKey ? (
-            <Text style={styles.keyChip} testID="hud-key">
-              🔑 KEY
-            </Text>
-          ) : null}
-          {snap.hiddenSec ? (
-            <Text style={styles.hiddenChip} testID="hud-hidden">
-              HIDDEN {snap.hiddenSec}s
-            </Text>
-          ) : null}
-          <Text style={styles.momentumLabel} testID="hud-momentum">MOMENTUM ×{snap.momentum.toFixed(1)}</Text>
-        </View>
-        <View style={styles.nodeBar}>
-          {segments.map((fill, i) => (
-            <View key={i} style={styles.node}>
-              <View style={[styles.nodeFill, { width: `${Math.round(fill * 100)}%`, opacity: fill >= 1 ? 1 : 0.55 }]} />
-            </View>
-          ))}
-        </View>
-      </View>
     </View>
   );
 });
 HUD.displayName = 'HUD';
 
 const styles = StyleSheet.create({
-  keyChip: { fontSize: 10, fontWeight: '900', color: '#FFD866', letterSpacing: 1 },
-  hiddenChip: { fontSize: 10, fontWeight: '900', color: '#7CFFD1', letterSpacing: 1 },
-  container: { position: 'absolute', left: 14, right: 14, zIndex: 100 },
-  headerBox: {
+  container: { position: 'absolute', left: 10, right: 10, zIndex: 100 },
+  bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
+    height: 40,
     backgroundColor: 'rgba(8, 13, 20, 0.85)',
     borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingLeft: 10,
+    paddingRight: 5,
     borderWidth: 1,
     borderColor: 'rgba(77, 240, 255, 0.15)',
   },
-  titleColumn: { flex: 1 },
-  levelTag: { fontSize: 11, fontWeight: '700', color: PALETTE.sonarCyan, letterSpacing: 2 },
-  levelTitle: { fontSize: 12, fontWeight: '600', color: '#CBD5E1', letterSpacing: 1.5, marginTop: 1 },
-  timeBox: { alignItems: 'center', paddingHorizontal: 12 },
-  timeLabel: { fontSize: 8, color: '#64748B', fontWeight: '700', letterSpacing: 1.5 },
-  timeValue: { fontSize: 14, color: '#F8FAFC', fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: 1 },
-  actions: { flexDirection: 'row', gap: 6 },
+  levelTag: { fontSize: 11, fontWeight: '800', color: PALETTE.sonarCyan, letterSpacing: 1.2 },
+  timeValue: { fontSize: 13, color: '#F8FAFC', fontWeight: '700', fontVariant: ['tabular-nums'], letterSpacing: 0.5 },
+  sonar: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nodeBar: { flex: 1, minWidth: 36, maxWidth: 70, flexDirection: 'row', gap: 3 },
+  node: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  nodeFill: { height: '100%', backgroundColor: PALETTE.sonarCyan, borderRadius: 3 },
+  gaugeTitle: { flexShrink: 0, fontSize: 11, fontWeight: '800', color: PALETTE.sonarCyan, letterSpacing: 0.5, fontVariant: ['tabular-nums'] },
+  keyChip: { flexShrink: 0, fontSize: 12, fontWeight: '900', color: '#FFD866' },
+  hiddenChip: { flexShrink: 0, fontSize: 10, fontWeight: '900', color: '#7CFFD1', letterSpacing: 0.5 },
+  momentumLabel: { fontSize: 11, fontWeight: '800', color: PALETTE.shardGold, letterSpacing: 0.5 },
+  actions: { flexDirection: 'row', gap: 4 },
   hudButton: {
-    width: 36,
-    height: 36,
+    width: 30,
+    height: 30,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
@@ -129,20 +139,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  hudButtonText: { color: '#F1F5F9', fontSize: 14, fontWeight: 'bold' },
-  gaugeContainer: {
-    marginTop: 8,
-    backgroundColor: 'rgba(8, 13, 20, 0.75)',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  gaugeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  gaugeTitle: { fontSize: 10, fontWeight: '800', color: PALETTE.sonarCyan, letterSpacing: 1.5 },
-  momentumLabel: { fontSize: 10, fontWeight: '800', color: PALETTE.shardGold, letterSpacing: 1.2 },
-  nodeBar: { flexDirection: 'row', gap: 4 },
-  node: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
-  nodeFill: { height: '100%', backgroundColor: PALETTE.sonarCyan, borderRadius: 3 },
+  hudButtonText: { color: '#F1F5F9', fontSize: 13, fontWeight: 'bold' },
 });

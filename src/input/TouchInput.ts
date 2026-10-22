@@ -27,8 +27,10 @@ const realTimers: Timers = { set: (fn, ms) => setTimeout(fn, ms), clear: (h) => 
  *  - A quick tap (shorter than `tapMaxMs`, moved less than `tapMaxTravelPx`) sends a pulse when the finger lifts
  *    and never touches the joystick.
  *  - A drag (moved past `tapMaxTravelPx`) or a hold (longer than `tapMaxMs`) takes the joystick, and sends no pulse.
- *  - The first finger that takes the stick owns it until it lifts; extra fingers cannot steal or jitter it, but a
- *    quick tap by another finger still sends a pulse (steer with one thumb, tap with the other).
+ *  - The first finger that takes the stick owns it until it lifts; extra fingers cannot steal or jitter it.
+ *  - While one finger steers, ANY other finger that touches down sends a pulse at once, on touch-down: that finger can
+ *    only be the sonar, so there is nothing to wait for (no tap/drag decision, no travel or time limit, no lag).
+ *    This is what lets the two thumbs work at the same time.
  *
  * Direct methods (stickDown / stickMove / stickUp, sonarDown / sonarUp) are the low-level API the gestures are built on.
  * Zones are decided by the host (React views); this class only tracks ids. No allocations per move.
@@ -64,6 +66,13 @@ export class TouchInput {
   /** A finger touched the screen anywhere. `anchor` = fixed stick centre, null = the stick appears under the thumb. */
   touchStart(id: number, x: number, y: number, anchor: { x: number; y: number } | null = null): void {
     if (this.touches.has(id)) return;
+    if (this.stickId !== null) {
+      // another finger is steering: this one is the sonar finger. Pulse right now, and keep the touch only so that its
+      // later moves and its lift are recognised and ignored.
+      this.touches.set(id, { x0: x, y0: y, x, y, t0: this.clock(), anchor, state: 'ignored', timer: null });
+      this.onPulse();
+      return;
+    }
     const t: Touch = { x0: x, y0: y, x, y, t0: this.clock(), anchor, state: 'pending', timer: null };
     // held long enough without lifting: it is not a tap, it is the joystick
     t.timer = this.timers.set(() => this.promote(id), this.cfg.tapMaxMs);
