@@ -6,9 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/images/icon.png",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/76deb0f8-a3d1-434f-a103-ddc23cb344cd",
       "requestHeaders": {
