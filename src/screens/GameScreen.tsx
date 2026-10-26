@@ -789,19 +789,20 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         keyState={hud.keyState}
       />
 
-      {/* 5a. DEV: jump to any level (development builds only) */}
-      {__DEV__ && !isWon && (
-        <View style={styles.devRow}>
+      {/* 5a. See Map & Skip to Level buttons */}
+      {!isWon && (
+        <View style={styles.devRow} pointerEvents="box-none">
           <TouchableOpacity
             style={[styles.devButton, revealAll && styles.devButtonOn]}
             activeOpacity={0.75}
             onPress={() => {
               revealAllRef.current = !revealAllRef.current;
               setRevealAll(revealAllRef.current);
+              drawFrame(Date.now());
             }}
           >
             <Text style={[styles.devButtonText, revealAll && { color: '#04121A' }]}>
-              {revealAll ? 'HIDE MAP' : 'SHOW MAP'}
+              {revealAll ? 'HIDE MAP' : 'SEE MAP'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -812,7 +813,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               setShowDevPicker(true);
             }}
           >
-            <Text style={styles.devButtonText}>DEV · LEVEL {level.id}</Text>
+            <Text style={styles.devButtonText}>SKIP TO LEVEL</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -840,6 +841,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           onResume={() => setIsPaused(false)}
           onRestart={initLevel}
           onMenu={onExitToMenu}
+          onSeeMap={() => {
+            revealAllRef.current = !revealAllRef.current;
+            setRevealAll(revealAllRef.current);
+            drawFrame(Date.now());
+          }}
+          onSkipLevel={() => setShowDevPicker(true)}
+          isMapRevealed={revealAll}
         />
       )}
 

@@ -9,9 +9,21 @@ interface PauseOverlayProps {
   onResume: () => void;
   onRestart: () => void;
   onMenu: () => void;
+  onSeeMap?: () => void;
+  onSkipLevel?: () => void;
+  isMapRevealed?: boolean;
 }
 
-export const PauseOverlay: React.FC<PauseOverlayProps> = ({ levelNumber, levelTitle, onResume, onRestart, onMenu }) => (
+export const PauseOverlay: React.FC<PauseOverlayProps> = ({
+  levelNumber,
+  levelTitle,
+  onResume,
+  onRestart,
+  onMenu,
+  onSeeMap,
+  onSkipLevel,
+  isMapRevealed = false,
+}) => (
   <View style={styles.backdrop}>
     <View style={styles.card}>
       <Text style={styles.kicker}>ECHO {levelNumber}</Text>
@@ -22,6 +34,25 @@ export const PauseOverlay: React.FC<PauseOverlayProps> = ({ levelNumber, levelTi
         <Play size={18} color="#04121A" fill="#04121A" />
         <Text style={[styles.btnText, { color: '#04121A' }]}>RESUME</Text>
       </TouchableOpacity>
+
+      {onSeeMap && (
+        <TouchableOpacity
+          style={[styles.btn, isMapRevealed && styles.goldActive]}
+          onPress={onSeeMap}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.btnText, { color: isMapRevealed ? '#04121A' : ART.gold }]}>
+            {isMapRevealed ? 'HIDE MAP' : 'SEE MAP'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {onSkipLevel && (
+        <TouchableOpacity style={styles.btn} onPress={onSkipLevel} activeOpacity={0.8}>
+          <Text style={[styles.btnText, { color: ART.gold }]}>SKIP TO LEVEL</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity style={styles.btn} onPress={onRestart} activeOpacity={0.8}>
         <RotateCcw size={18} color={ART.cyan} />
         <Text style={styles.btnText}>RESTART</Text>
@@ -74,5 +105,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   primary: { backgroundColor: ART.cyan, borderColor: ART.cyan },
+  goldActive: { backgroundColor: ART.gold, borderColor: ART.gold },
   btnText: { color: ART.cyan, fontSize: 14, fontWeight: '800', letterSpacing: 2.5 },
 });
