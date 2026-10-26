@@ -45,7 +45,7 @@ export class MovementSystem {
       let diff = targetRotation - player.rotation;
       while (diff < -Math.PI) diff += Math.PI * 2;
       while (diff > Math.PI) diff -= Math.PI * 2;
-      player.rotation += diff * 0.25;
+      player.rotation += diff * (1 - Math.exp(-deltaTime * 16)); // same turn feel at any frame rate
 
       // Check sprint noise
       if (magnitude > sprintThreshold) {

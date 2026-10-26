@@ -22,7 +22,8 @@ export class CollisionSystem {
     const solidObstacles: Rect[] = [
       ...walls,
       ...objects.filter((obj) => {
-        if (obj.type === 'wall' || obj.type === 'glass_wall' || obj.type === 'moving_wall') return true;
+        if (obj.type === 'glass_wall') return obj.state !== 'open';
+        if (obj.type === 'wall' || obj.type === 'moving_wall') return true;
         if (obj.type === 'resonance_gate' && obj.state !== 'open') return true;
         return false;
       }),
@@ -124,6 +125,20 @@ export class CollisionSystem {
       }
     }
     return null;
+  }
+
+  /**
+   * Checks if the bat picked up the key (opens every locked laser barrier).
+   */
+  static checkKeyCollection(playerPos: Vec2, radius: number, objects: EnvObject[]): boolean {
+    for (const obj of objects) {
+      if (obj.type === 'key' && !obj.collected && this.checkCircleAABB(playerPos, radius + 6, obj)) {
+        obj.collected = true;
+        for (const o of objects) if (o.type === 'glass_wall' && o.locked) o.state = 'open';
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

@@ -29,7 +29,8 @@ export type EnvObjectType =
   | 'sonar_shard'
   | 'resonance_gate'
   | 'pressure_plate'
-  | 'moving_wall';
+  | 'moving_wall'
+  | 'key';
 
 export interface EnvObject extends Rect, Revealable {
   type: EnvObjectType;
@@ -45,6 +46,8 @@ export interface EnvObject extends Rect, Revealable {
   // Pressure plate / Echo crystal triggers
   triggerRadius?: number;
   collected?: boolean;
+  /** laser barrier that opens when the level's key is collected */
+  locked?: boolean;
 }
 
 export type WraithState = 'DORMANT' | 'ALERTED' | 'HUNTING' | 'LOSING' | 'FRENZY';
@@ -63,6 +66,19 @@ export interface WraithEntity {
   revealedAt: number;
   revealStrength: number;
   lastBreatheTime: number;
+  /** where the enemy is looking (radians, 0 = right); its red vision cone points this way */
+  facing: number;
+  /** resting direction the cone sweeps around while idle */
+  baseFacing: number;
+  sweepSeed: number;
+  /** current route through the maze while hunting */
+  path: { col: number; row: number }[];
+  repathAt: number;
+  /** last time (ms) a hunting enemy saw or sensed the bat */
+  lastSeenAt?: number;
+  /** idle patrol: the cell it is drifting to, and when it may move again */
+  patrolTarget?: { col: number; row: number } | null;
+  pauseUntil?: number;
 }
 
 export interface PlayerEntity {
@@ -89,6 +105,20 @@ export interface SonarWaveEntity {
   bounced?: boolean;
   piercing?: boolean;
   ricochetCount?: number;
+  /** pulses the bat fires travel with the bat */
+  followsPlayer?: boolean;
+}
+
+/** A disc of the maze lit up by a sonar pulse; drives the darkness mask + wave visuals. */
+export interface RevealZone {
+  id: string;
+  x: number;
+  y: number;
+  maxRadius: number;
+  createdAt: number;
+  intensity: number;
+  /** pulses the bat fires travel with the bat */
+  followsPlayer?: boolean;
 }
 
 export interface ImpactSpark {

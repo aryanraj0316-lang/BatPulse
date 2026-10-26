@@ -3,12 +3,11 @@ import {
   View,
   StyleSheet,
   Dimensions,
-  PanResponder,
-  Pressable,
-  Text,
   Platform,
+  Text,
+  TouchableOpacity,
+  type GestureResponderEvent,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import {
   LevelData,
   PlayerEntity,
@@ -20,6 +19,7 @@ import {
   AmbientDust,
   WraithEntity,
   GhostPoint,
+  RevealZone,
 } from '../types/game';
 import { GAME_CONFIG } from '../constants/gameConfig';
 import { PALETTE } from '../constants/palette';
@@ -29,13 +29,17 @@ import { CollisionSystem } from '../engine/CollisionSystem';
 import { SonarSystem } from '../engine/SonarSystem';
 import { MovementSystem } from '../engine/MovementSystem';
 import { HunterAI } from '../engine/HunterAI';
+import { buildNavGrid } from '../engine/NavGrid';
 import { AudioEngine } from '../engine/AudioEngine';
 import { HapticEngine } from '../engine/HapticEngine';
 import { ScoringSystem, ScoreBreakdown } from '../engine/ScoringSystem';
 import { useProgressStore } from '../state/progressStore';
 import { useSettingsStore } from '../state/settingsStore';
-import { GameCanvas } from '../render/GameCanvas';
+import { GameCanvas, GameCanvasHandle } from '../render/GameCanvas';
+import type { JoystickState } from '../render/skia/SceneRenderer';
 import { HUD } from '../components/HUD';
+import { PauseOverlay } from '../components/PauseOverlay';
+import { DevLevelPicker } from '../components/DevLevelPicker';
 import { ResultCard } from '../components/ResultCard';
 
 interface GameScreenProps {
@@ -46,6 +50,14 @@ interface GameScreenProps {
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const JOY_RADIUS = 50;
+const TAP_MAX_MS = 260; // a touch shorter than this that barely moves = sonar tap
+const TAP_MAX_MOVE = 12; // px a finger may wander and still count as a tap
+const restingJoystick = (): JoystickState => ({
+  center: { x: SW - 75, y: SH - 85 },
+  knob: { x: 0, y: 0 },
+  active: false,
+  radius: JOY_RADIUS,
+});
 
 export const GameScreen: React.FC<GameScreenProps> = ({
   levelId,
@@ -66,20 +78,62 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const hasWhisperStep = equippedAbilities.includes('WHISPER_STEP');
   const sonarRadius = hasWidePulse ? GAME_CONFIG.SONAR_RADIUS * 1.4 : GAME_CONFIG.SONAR_RADIUS;
 
-  // Single tick to drive high-fps React re-renders
-  const [, setTick] = useState(0);
+  // HUD values. Only pushed to React when they actually change (not every frame).
+  const [hud, setHud] = useState({
+    sonar: 0,
+    elapsed: 0,
+    momentum: 0,
+    frenzy: false,
+    lastPingAt: 0,
+    reload: -1,
+    keyState: 0,
+  });
+  const hudRef = useRef(hud);
+  const canvasRef = useRef<GameCanvasHandle>(null);
+  function syncHud(force = false) {
+    const pl = playerRef.current;
+    const next = {
+      sonar: sonarLeftRef.current,
+      elapsed: elapsedRef.current,
+      momentum: pl ? pl.momentum : 0,
+      frenzy: frenzyRef.current,
+      lastPingAt: lastPingRef.current,
+      // -1 = not reloading; otherwise 0..1 in 1/20 steps (so the HUD redraws only ~5×/s)
+      reload: reloadingRef.current ? Math.floor((reloadMsRef.current / GAME_CONFIG.SONAR_RELOAD_MS) * 20) / 20 : -1,
+      // 0 = no key in this level, 1 = key still hidden, 2 = key collected
+      keyState: objectsRef.current.some((o) => o.type === 'key') ? (objectsRef.current.some((o) => o.type === 'key' && !o.collected) ? 1 : 2) : 0,
+    };
+    const cur = hudRef.current;
+    if (
+      force ||
+      cur.sonar !== next.sonar ||
+      cur.elapsed !== next.elapsed ||
+      cur.momentum !== next.momentum ||
+      cur.frenzy !== next.frenzy ||
+      cur.lastPingAt !== next.lastPingAt ||
+      cur.reload !== next.reload ||
+      cur.keyState !== next.keyState
+    ) {
+      hudRef.current = next;
+      setHud(next);
+    }
+  }
 
   // Overlay / UI states
   const [isPaused, setIsPaused] = useState(false);
+  const [showDevPicker, setShowDevPicker] = useState(false);
+  // DEV: switch the darkness off to see the whole maze
+  const [revealAll, setRevealAll] = useState(false);
+  const revealAllRef = useRef(false);
   const [isWon, setIsWon] = useState(false);
   const [scoreResult, setScoreResult] = useState<ScoreBreakdown | null>(null);
   const [shardsEarned, setShardsEarned] = useState(0);
   const [isRedStatic, setIsRedStatic] = useState(false);
 
-  // Joystick visual state (starts down in the bottom-right corner)
-  const [joyCenter, setJoyCenter] = useState<Vec2>({ x: SW - 75, y: SH - 85 });
-  const [joyKnob, setJoyKnob] = useState<Vec2>({ x: 0, y: 0 });
-  const [joyActive, setJoyActive] = useState(false);
+  // Joystick (drawn by the Skia canvas; rests in the bottom-right corner)
+  const joyRef = useRef<JoystickState>(restingJoystick());
+  // Active touches: which one steers, and which are still candidate taps
+  const touchesRef = useRef(new Map<number, { x0: number; y0: number; t0: number; steering: boolean }>());
 
   // Mutable game state
   const playerRef = useRef<PlayerEntity>(null as any);
@@ -88,6 +142,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const goalRef = useRef<Vec2 & { radius: number; revealedAt: number; revealStrength: number }>(null as any);
   const wraithsRef = useRef<WraithEntity[]>([]);
   const wavesRef = useRef<SonarWaveEntity[]>([]);
+  const revealsRef = useRef<RevealZone[]>([]);
   const sparksRef = useRef<ImpactSpark[]>([]);
   const dustRef = useRef<AmbientDust[]>([]);
   const gridRef = useRef(new SpatialHashGrid(50));
@@ -98,6 +153,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const runningRef = useRef(true);
   const lastFrameRef = useRef(Date.now());
   const lastPingRef = useRef(0);
+  // sonar reload: recharging once at/below the threshold until full; progress 0..1 of the next pulse
+  const reloadingRef = useRef(false);
+  const reloadMsRef = useRef(0);
+  const pulsesFiredRef = useRef(0);
+  // visual-only: when the bat last bumped a wall / picked something up (drives its reactions)
+  const bumpAtRef = useRef(0);
+  const pickupAtRef = useRef(0);
   const ghostRef = useRef(true);
   const trackRef = useRef<GhostPoint[]>([]);
   const rafRef = useRef<number | null>(null);
@@ -150,13 +212,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       revealStrength: 0,
     };
     wraithsRef.current = level.hunters.map((h) =>
-      HunterAI.create(h.anchor, h.speedMultiplier)
+      HunterAI.create(h.anchor, h.speedMultiplier, buildNavGrid(level, SW, SH, level.objects))
     );
     wavesRef.current = [];
+    revealsRef.current = [];
     sparksRef.current = [];
     dustRef.current = dust;
     inputRef.current = { x: 0, y: 0 };
     sonarLeftRef.current = level.sonar.allowance;
+    reloadingRef.current = false;
+    reloadMsRef.current = 0;
+    pulsesFiredRef.current = 0;
     elapsedRef.current = 0;
     frenzyRef.current = false;
     runningRef.current = true;
@@ -171,24 +237,31 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     setScoreResult(null);
     setShardsEarned(0);
     setIsRedStatic(false);
-    setJoyActive(false);
-    setJoyKnob({ x: 0, y: 0 });
+    joyRef.current = restingJoystick();
+    touchesRef.current.clear();
+    syncHud(true);
   }, [level]);
 
   useEffect(() => {
+    AudioEngine.preload(); // load every sound now so nothing loads mid-game
     initLevel();
     return () => {
-      AudioEngine.stopAll();
+      // level is changing: stop this level's sounds (loops, jingles, pending echoes)
+      AudioEngine.silenceAll();
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
   }, [initLevel]);
 
+  // leaving the game screen entirely: free all audio players
+  useEffect(() => () => AudioEngine.stopAll(), []);
+
   const triggerRestart = useCallback(() => {
     runningRef.current = false;
+    AudioEngine.playDeath(soundEnabled);
     HapticEngine.death(hapticsEnabled);
     setIsRedStatic(true);
     setTimeout(() => initLevel(), 250);
-  }, [hapticsEnabled, initLevel]);
+  }, [hapticsEnabled, soundEnabled, initLevel]);
 
   // Elapsed timer
   useEffect(() => {
@@ -215,6 +288,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     }
     lastPingRef.current = now;
     if (level.sonar.allowance < 999) sonarLeftRef.current -= 1;
+    pulsesFiredRef.current += 1;
     playerRef.current.momentum = 0;
 
     wavesRef.current = [
@@ -228,25 +302,32 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         createdAt: now,
         intensity: 1.0,
         piercing: hasPiercing,
+        followsPlayer: true,
+      },
+    ];
+    revealsRef.current = [
+      ...revealsRef.current,
+      {
+        id: `z_${now}_${Math.random()}`,
+        x: playerRef.current.pos.x,
+        y: playerRef.current.pos.y,
+        maxRadius: sonarRadius,
+        createdAt: now,
+        intensity: 1.0,
+        followsPlayer: true,
       },
     ];
     AudioEngine.playSonarPulse(soundEnabled);
     HapticEngine.ping(hapticsEnabled);
-
-    for (const w of wraithsRef.current) {
-      const { alerted } = HunterAI.onPlayerPing(
-        w,
-        playerRef.current.pos,
-        now,
-        lastPingRef.current
-      );
-      if (alerted) {
-        ghostRef.current = false;
-        AudioEngine.playWraithAlert(soundEnabled);
-        HapticEngine.wraithAlert(hapticsEnabled);
-      }
-    }
   }, [level, sonarRadius, hasPiercing, soundEnabled, hapticsEnabled]);
+
+  // Web-only preview: `?autopulse` fires the sonar every 1.8s (handy for screenshots / attract mode)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (!/[?&]autopulse(&|$)/.test(window.location.search)) return;
+    const id = setInterval(() => fireSonar(), 1800);
+    return () => clearInterval(id);
+  }, [fireSonar]);
 
   // Keyboard controls for Web / Simulator
   useEffect(() => {
@@ -291,62 +372,105 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   }, [fireSonar]);
 
   // ══════════════════════════════════════════════════════════════
-  // RIGHT-SIDE FLOATING ANALOG JOYSTICK (PanResponder)
+  // WHOLE-SCREEN TOUCH: quick tap anywhere = sonar, press + drag = joystick
   // ══════════════════════════════════════════════════════════════
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
+  type TouchPoint = { identifier?: number; pageX: number; pageY: number };
+  const changedTouches = (e: GestureResponderEvent): TouchPoint[] => {
+    const ne: any = e.nativeEvent;
+    return ne.changedTouches && ne.changedTouches.length ? ne.changedTouches : [ne];
+  };
+  const allTouches = (e: GestureResponderEvent): TouchPoint[] => {
+    const ne: any = e.nativeEvent;
+    return ne.touches && ne.touches.length ? ne.touches : [ne];
+  };
 
-        onPanResponderGrant: (evt) => {
-          const { pageX, pageY } = evt.nativeEvent;
-          setJoyCenter({ x: pageX, y: pageY });
-          setJoyKnob({ x: 0, y: 0 });
-          setJoyActive(true);
-          inputRef.current = { x: 0, y: 0 };
-        },
+  const onTouchDown = (e: GestureResponderEvent) => {
+    for (const tch of changedTouches(e)) {
+      const id = tch.identifier ?? 0;
+      if (touchesRef.current.has(id)) continue;
+      touchesRef.current.set(id, { x0: tch.pageX, y0: tch.pageY, t0: Date.now(), steering: false });
+    }
+  };
 
-        onPanResponderMove: (_evt, gestureState) => {
-          const { dx, dy } = gestureState;
-          const dist = Math.hypot(dx, dy);
+  const onTouchMove = (e: GestureResponderEvent) => {
+    let someoneSteering = false;
+    touchesRef.current.forEach((t) => {
+      if (t.steering) someoneSteering = true;
+    });
+    for (const tch of allTouches(e)) {
+      const tr = touchesRef.current.get(tch.identifier ?? 0);
+      if (!tr) continue;
+      if (!tr.steering && !someoneSteering && Math.hypot(tch.pageX - tr.x0, tch.pageY - tr.y0) > TAP_MAX_MOVE) {
+        // This finger becomes the floating joystick, centred where it first touched
+        tr.steering = true;
+        someoneSteering = true;
+        joyRef.current.center = { x: tr.x0, y: tr.y0 };
+        joyRef.current.active = true;
+      }
+      if (tr.steering) {
+        const dx = tch.pageX - joyRef.current.center.x;
+        const dy = tch.pageY - joyRef.current.center.y;
+        const dist = Math.hypot(dx, dy);
+        const k = dist > JOY_RADIUS ? JOY_RADIUS / dist : 1;
+        joyRef.current.knob = { x: dx * k, y: dy * k };
+        const mag = Math.min(1, dist / JOY_RADIUS);
+        inputRef.current = dist > 2 ? { x: (dx / dist) * mag, y: (dy / dist) * mag } : { x: 0, y: 0 };
+      }
+    }
+  };
 
-          let clampedX = dx;
-          let clampedY = dy;
-          if (dist > JOY_RADIUS) {
-            clampedX = (dx / dist) * JOY_RADIUS;
-            clampedY = (dy / dist) * JOY_RADIUS;
-          }
+  const onTouchUp = (e: GestureResponderEvent) => {
+    for (const tch of changedTouches(e)) {
+      const id = tch.identifier ?? 0;
+      const tr = touchesRef.current.get(id);
+      if (!tr) continue;
+      touchesRef.current.delete(id);
+      if (tr.steering) {
+        inputRef.current = { x: 0, y: 0 };
+        joyRef.current = restingJoystick();
+      } else if (Date.now() - tr.t0 <= TAP_MAX_MS && Math.hypot(tch.pageX - tr.x0, tch.pageY - tr.y0) <= TAP_MAX_MOVE) {
+        fireSonar();
+      }
+    }
+  };
 
-          const mag = Math.min(1.0, dist / JOY_RADIUS);
-          if (dist > 2) {
-            inputRef.current = {
-              x: (dx / dist) * mag,
-              y: (dy / dist) * mag,
-            };
-          } else {
-            inputRef.current = { x: 0, y: 0 };
-          }
+  const onTouchCancel = () => {
+    touchesRef.current.clear();
+    inputRef.current = { x: 0, y: 0 };
+    joyRef.current = restingJoystick();
+  };
 
-          setJoyKnob({ x: clampedX, y: clampedY });
-        },
+  // Enemy navigation grid built from the REAL walls (water + lasers impassable) — once per level
+  const navGrid = useMemo(() => buildNavGrid(level, SW, SH, level.objects), [level]);
 
-        onPanResponderRelease: () => {
-          inputRef.current = { x: 0, y: 0 };
-          setJoyActive(false);
-          setJoyKnob({ x: 0, y: 0 });
-        },
-
-        onPanResponderTerminate: () => {
-          inputRef.current = { x: 0, y: 0 };
-          setJoyActive(false);
-          setJoyKnob({ x: 0, y: 0 });
-        },
-      }),
-    []
-  );
+  const drawFrame = (now: number) => {
+    const pl = playerRef.current;
+    if (!pl || !canvasRef.current) return;
+    canvasRef.current.draw({
+      now,
+      player: pl,
+      wraiths: wraithsRef.current,
+      objects: objectsRef.current,
+      goal: goalRef.current,
+      revealZones: revealsRef.current,
+      sparks: sparksRef.current,
+      dust: dustRef.current,
+      ghostTrack: existingRecord?.ghostTrack,
+      isHunting: wraithsRef.current.some((w) => w.state === 'HUNTING' || w.state === 'FRENZY'),
+      joystick: joyRef.current,
+      revealAll: revealAllRef.current || undefined,
+      batFx: {
+        pingAt: lastPingRef.current,
+        bumpAt: bumpAtRef.current,
+        pickupAt: pickupAtRef.current,
+        fear: wraithsRef.current.reduce((acc, w) => {
+          if (w.state === 'DORMANT') return acc;
+          const d = Math.hypot(w.pos.x - pl.pos.x, w.pos.y - pl.pos.y);
+          return Math.max(acc, Math.max(0, 1 - d / 260));
+        }, 0),
+      },
+    });
+  };
 
   // ══════════════════════════════════════════════════════════════
   // HIGH-PERFORMANCE 60 FPS ENGINE LOOP
@@ -354,6 +478,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   useEffect(() => {
     const tick = () => {
       if (!runningRef.current || pausedRef.current || wonRef.current) {
+        AudioEngine.stopLoops();
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
@@ -378,13 +503,23 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         p: false,
       });
 
-      if (mv.emittedFootstep) {
-        for (const w of wraithsRef.current) {
-          if (HunterAI.onPlayerSprint(w, p.pos)) {
-            ghostRef.current = false;
-            AudioEngine.playWraithAlert(soundEnabled);
-            HapticEngine.wraithAlert(hapticsEnabled);
-          }
+      // (enemies no longer hear footsteps: they only react to what they see)
+
+      // Lane assist: steering mostly along one axis gently centres the bat in that corridor,
+      // so it lines up with openings instead of scraping walls and catching on corners.
+      if (GAME_CONFIG.LANE_ASSIST > 0) {
+        const inp = inputRef.current;
+        const ax = Math.abs(inp.x);
+        const ay = Math.abs(inp.y);
+        const k = Math.min(1, dt * GAME_CONFIG.LANE_ASSIST);
+        const cellW = SW / level.grid.cols;
+        const cellH = SH / level.grid.rows;
+        if (ax > 0.25 && ax > ay * 1.8) {
+          const off = (Math.floor(p.pos.y / cellH) + 0.5) * cellH - p.pos.y;
+          if (Math.abs(off) < cellH * 0.42) mv.deltaPos.y += off * k * Math.min(1, ax);
+        } else if (ay > 0.25 && ay > ax * 1.8) {
+          const off = (Math.floor(p.pos.x / cellW) + 0.5) * cellW - p.pos.x;
+          if (Math.abs(off) < cellW * 0.42) mv.deltaPos.x += off * k * Math.min(1, ay);
         }
       }
 
@@ -402,6 +537,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       );
       p.pos = coll.newPos;
 
+      if (coll.collided && Math.hypot(p.velocity.x, p.velocity.y) > GAME_CONFIG.PLAYER_SPEED * 0.4 && now - bumpAtRef.current > 300) {
+        bumpAtRef.current = now; // visual reaction only
+      }
       if (coll.collided && mv.isSprinting) {
         AudioEngine.playCollisionThud(soundEnabled);
         HapticEngine.wallBump(hapticsEnabled);
@@ -413,6 +551,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         return;
       }
       if (CollisionSystem.checkShardCollection(p.pos, p.radius, objectsRef.current)) {
+        pickupAtRef.current = now; // visual reaction only
         sonarLeftRef.current = Math.min(level.sonar.allowance, sonarLeftRef.current + 1);
         AudioEngine.playShardChime(soundEnabled);
         HapticEngine.shardPickup(hapticsEnabled);
@@ -420,25 +559,42 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       const plate = CollisionSystem.checkPressurePlate(p.pos, p.radius, objectsRef.current, now);
       if (plate) {
         AudioEngine.playWraithAlert(soundEnabled);
-        for (const w of wraithsRef.current) {
-          HunterAI.onDistraction(w, {
-            x: plate.x + plate.width / 2,
-            y: plate.y + plate.height / 2,
-          });
+      }
+
+      // 3b. Key: opens the laser barriers sealing the exit
+      if (CollisionSystem.checkKeyCollection(p.pos, p.radius, objectsRef.current)) {
+        pickupAtRef.current = now;
+        AudioEngine.playShardChime(soundEnabled);
+        HapticEngine.shardPickup(hapticsEnabled);
+      }
+
+      // 3c. Sonar reload: at/below the threshold it recharges one pulse at a time until full
+      if (level.sonar.allowance < 999) {
+        if (sonarLeftRef.current <= GAME_CONFIG.SONAR_RELOAD_BELOW) reloadingRef.current = true;
+        if (reloadingRef.current) {
+          reloadMsRef.current += dt * 1000;
+          if (reloadMsRef.current >= GAME_CONFIG.SONAR_RELOAD_MS) {
+            reloadMsRef.current = 0;
+            sonarLeftRef.current = Math.min(level.sonar.allowance, sonarLeftRef.current + 1);
+            AudioEngine.playShardChime(soundEnabled);
+          }
+          if (sonarLeftRef.current >= level.sonar.allowance) {
+            reloadingRef.current = false;
+            reloadMsRef.current = 0;
+          }
         }
       }
 
-      // 4. Goal Check
-      if (CollisionSystem.checkGoal(p.pos, p.radius, goalRef.current)) {
+      // 4. Goal Check (only once the exit is unlocked)
+      const exitLocked = objectsRef.current.some((o) => o.type === 'key' && !o.collected);
+      if (!exitLocked && CollisionSystem.checkGoal(p.pos, p.radius, goalRef.current)) {
         runningRef.current = false;
         wonRef.current = true;
         AudioEngine.playLevelComplete(soundEnabled);
         HapticEngine.victory(hapticsEnabled);
 
-        const used =
-          level.sonar.allowance >= 999
-            ? 1
-            : level.sonar.allowance - sonarLeftRef.current;
+        // pulses actually fired (the reload means "allowance − left" is no longer the count)
+        const used = level.sonar.allowance >= 999 ? 1 : Math.max(1, pulsesFiredRef.current);
         const sc = ScoringSystem.evaluateScore(
           level,
           elapsedRef.current,
@@ -464,7 +620,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         return;
       }
 
-      // 5. Sonar Waves Sweep
+      // 5. Sonar Waves Sweep — pulses the bat fired move along with it
+      for (const wave of wavesRef.current) {
+        if (wave.followsPlayer) wave.origin = { x: p.pos.x, y: p.pos.y };
+      }
+      for (const z of revealsRef.current) {
+        if (z.followsPlayer) {
+          z.x = p.pos.x;
+          z.y = p.pos.y;
+        }
+      }
       const liveWaves: SonarWaveEntity[] = [];
       const secondaryPings: Vec2[] = [];
       for (const wave of wavesRef.current) {
@@ -495,9 +660,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           createdAt: now,
           intensity: 0.8,
         });
+        revealsRef.current.push({
+          id: `zs_${now}_${Math.random()}`,
+          x: sp.x,
+          y: sp.y,
+          maxRadius: sonarRadius * 0.8,
+          createdAt: now,
+          intensity: 0.8,
+        });
         AudioEngine.playSonarPulse(soundEnabled);
       }
       wavesRef.current = liveWaves;
+      const zoneLife =
+        GAME_CONFIG.SONAR_EXPAND_DURATION * 1000 + GAME_CONFIG.REVEAL_HOLD_MS + GAME_CONFIG.REVEAL_FADE_MS;
+      if (revealsRef.current.length && now - revealsRef.current[0].createdAt > zoneLife) {
+        revealsRef.current = revealsRef.current.filter((z) => now - z.createdAt <= zoneLife);
+      }
 
       // 6. Particles Sparks
       const ls: ImpactSpark[] = [];
@@ -526,16 +704,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       let anyFrenzy = false;
       const cW = SW / level.grid.cols;
       const cH = SH / level.grid.rows;
-      const openGrid = Array.from({ length: level.grid.rows }, (_, r) =>
-        Array.from({ length: level.grid.cols }, (_, c) => ({
-          col: c,
-          row: r,
-          walls: { top: false, right: false, bottom: false, left: false },
-          visited: true,
-        }))
-      );
+      const hunterWorld = {
+        nav: navGrid,
+        walls: wallsRef.current,
+        objects: objectsRef.current,
+        playerPos: p.pos,
+        playerRadius: p.radius,
+        worldW: SW,
+        worldH: SH,
+      };
       for (const wraith of wraithsRef.current) {
-        HunterAI.update(wraith, openGrid, cW, cH, dt, now);
+        // enemies only give chase when the bat enters their red vision cone
+        if (HunterAI.update(wraith, hunterWorld, dt, now).spotted) {
+          ghostRef.current = false;
+          AudioEngine.playWraithAlert(soundEnabled);
+          HapticEngine.wraithAlert(hapticsEnabled);
+        }
         if (wraith.state === 'FRENZY') anyFrenzy = true;
         if (Math.hypot(wraith.pos.x - p.pos.x, wraith.pos.y - p.pos.y) < wraith.radius + p.radius) {
           triggerRestart();
@@ -543,10 +727,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         }
       }
       frenzyRef.current = anyFrenzy;
-      AudioEngine.updateWraithAudio(wraithsRef.current[0], p.pos, soundEnabled);
+      AudioEngine.updateLoops({
+        enabled: soundEnabled,
+        playerPos: p.pos,
+        playerSpeed: Math.hypot(p.velocity.x, p.velocity.y),
+        maxSpeed: GAME_CONFIG.PLAYER_SPEED,
+        wraiths: wraithsRef.current,
+      });
 
-      // Trigger high-fps React re-render
-      setTick((t) => (t + 1) | 0);
+      // Draw the frame straight to the GPU canvas (no React re-render)
+      drawFrame(now);
+      syncHud();
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -564,88 +755,91 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     triggerRestart,
   ]);
 
-  const p = playerRef.current;
 
   return (
     <View style={[styles.container, isRedStatic && styles.redStatic]}>
-      {/* 1. LAYERED GAME CANVAS (pointerEvents="none" for zero touch blocking) */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {p && (
-          <GameCanvas
-            player={p}
-            walls={wallsRef.current}
-            objects={objectsRef.current}
-            goal={goalRef.current}
-            waves={wavesRef.current}
-            sparks={sparksRef.current}
-            dustParticles={dustRef.current}
-            wraiths={wraithsRef.current}
-            ghostTrack={existingRecord?.ghostTrack}
-            now={Date.now()}
-            worldWidth={SW}
-            worldHeight={SH}
-            isHunting={wraithsRef.current.some(
-              (w) => w.state === 'HUNTING' || w.state === 'FRENZY'
-            )}
-          />
-        )}
-      </View>
+      {/* 1. GPU GAME CANVAS (Skia) — also draws the floating joystick */}
+      <GameCanvas ref={canvasRef} level={level} worldWidth={SW} worldHeight={SH} />
 
-      {/* 2. FLOATING JOYSTICK VISUAL OVERLAY (Full Screen, pointerEvents="none") */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Svg width={SW} height={SH}>
-          {/* Base outer ring */}
-          <Circle
-            cx={joyCenter.x}
-            cy={joyCenter.y}
-            r={JOY_RADIUS}
-            stroke={joyActive ? PALETTE.sonarCyan : 'rgba(255, 255, 255, 0.15)'}
-            strokeWidth={1.5}
-            fill={joyActive ? 'rgba(77, 240, 255, 0.08)' : 'rgba(10, 16, 28, 0.3)'}
-          />
-          {/* Directional Knob */}
-          <Circle
-            cx={joyCenter.x + joyKnob.x}
-            cy={joyCenter.y + joyKnob.y}
-            r={20}
-            fill={joyActive ? PALETTE.sonarCyan : 'rgba(255, 255, 255, 0.25)'}
-            stroke="#FFFFFF"
-            strokeWidth={joyActive ? 1.5 : 0}
-          />
-        </Svg>
-      </View>
+      {/* 2. WHOLE-SCREEN TOUCH: tap anywhere = sonar, drag = joystick */}
+      <View
+        style={StyleSheet.absoluteFill}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => false}
+        onResponderGrant={onTouchDown}
+        {...({ onResponderStart: onTouchDown, onResponderEnd: onTouchUp } as object)}
+        onResponderMove={onTouchMove}
+        onResponderRelease={onTouchUp}
+        onResponderTerminate={onTouchCancel}
+      />
 
-      {/* 3. LEFT-SIDE SONAR BUTTON & TAP ZONE (Left 35% of screen) */}
-      <Pressable
-        style={styles.sonarZone}
-        onPress={fireSonar}
-        android_disableSound
-      >
-        <View style={styles.sonarButton}>
-          <Svg width={56} height={56} viewBox="0 0 56 56">
-            <Circle cx={28} cy={28} r={24} stroke={PALETTE.sonarCyan} strokeWidth={1.5} fill="none" opacity={0.4} strokeDasharray="4, 3" />
-            <Circle cx={28} cy={28} r={16} stroke={PALETTE.sonarCyan} strokeWidth={2} fill="none" opacity={0.8} />
-            <Circle cx={28} cy={28} r={7} fill={PALETTE.sonarCyan} />
-          </Svg>
-          <Text style={styles.sonarButtonText}>SONAR</Text>
+      {/* 4. HEADS-UP DISPLAY */}
+      <HUD
+        levelTitle={level.name}
+        levelNumber={level.id}
+        sonarRemaining={hud.sonar}
+        maxSonar={level.sonar.allowance}
+        elapsedSeconds={hud.elapsed}
+        momentum={hud.momentum}
+        isFrenzy={hud.frenzy}
+        onPause={() => setIsPaused((prev) => !prev)}
+        onRestart={initLevel}
+        reloadProgress={hud.reload}
+        keyState={hud.keyState}
+      />
+
+      {/* 5a. DEV: jump to any level (development builds only) */}
+      {__DEV__ && !isWon && (
+        <View style={styles.devRow}>
+          <TouchableOpacity
+            style={[styles.devButton, revealAll && styles.devButtonOn]}
+            activeOpacity={0.75}
+            onPress={() => {
+              revealAllRef.current = !revealAllRef.current;
+              setRevealAll(revealAllRef.current);
+            }}
+          >
+            <Text style={[styles.devButtonText, revealAll && { color: '#04121A' }]}>
+              {revealAll ? 'HIDE MAP' : 'SHOW MAP'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.devButton}
+            activeOpacity={0.75}
+            onPress={() => {
+              setIsPaused(true);
+              setShowDevPicker(true);
+            }}
+          >
+            <Text style={styles.devButtonText}>DEV · LEVEL {level.id}</Text>
+          </TouchableOpacity>
         </View>
-      </Pressable>
+      )}
+      {showDevPicker && (
+        <DevLevelPicker
+          currentLevel={level.id}
+          onPick={(id) => {
+            setShowDevPicker(false);
+            setIsPaused(false);
+            if (id === level.id) initLevel();
+            else onNextLevel(id);
+          }}
+          onClose={() => {
+            setShowDevPicker(false);
+            setIsPaused(false);
+          }}
+        />
+      )}
 
-      {/* 4. RIGHT-SIDE FLOATING JOYSTICK CAPTURE ZONE (Right 65% of screen) */}
-      <View style={styles.joystickZone} {...panResponder.panHandlers} />
-
-      {/* 5. HEADS-UP DISPLAY */}
-      {p && (
-        <HUD
-          levelTitle={level.name}
+      {/* 5b. PAUSE MENU */}
+      {isPaused && !isWon && !showDevPicker && (
+        <PauseOverlay
           levelNumber={level.id}
-          sonarRemaining={sonarLeftRef.current}
-          maxSonar={level.sonar.allowance}
-          elapsedSeconds={elapsedRef.current}
-          momentum={p.momentum}
-          isFrenzy={frenzyRef.current}
-          onPause={() => setIsPaused((prev) => !prev)}
+          levelTitle={level.name}
+          onResume={() => setIsPaused(false)}
           onRestart={initLevel}
+          onMenu={onExitToMenu}
         />
       )}
 
@@ -673,50 +867,26 @@ const styles = StyleSheet.create({
     backgroundColor: PALETTE.voidBlack,
     overflow: 'hidden',
   },
+  devRow: {
+    position: 'absolute',
+    top: 84,
+    right: 14,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 150,
+  },
+  devButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 194, 74, 0.6)',
+    backgroundColor: 'rgba(20, 14, 4, 0.85)',
+  },
+  devButtonOn: { backgroundColor: '#FFC24A', borderColor: '#FFC24A' },
+  devButtonText: { color: '#FFC24A', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   redStatic: {
     backgroundColor: PALETTE.wraithRed,
     opacity: 0.9,
-  },
-  sonarZone: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    width: '35%',
-    height: '100%',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingBottom: 40,
-    zIndex: 50,
-  },
-  joystickZone: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: '65%',
-    height: '100%',
-    zIndex: 50,
-  },
-  sonarButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(10, 16, 28, 0.75)',
-    borderWidth: 1.5,
-    borderColor: PALETTE.sonarCyan,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: PALETTE.sonarCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  sonarButtonText: {
-    color: PALETTE.sonarCyan,
-    fontSize: 9,
-    fontFamily: 'monospace',
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginTop: -2,
   },
 });

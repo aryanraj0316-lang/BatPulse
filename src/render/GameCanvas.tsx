@@ -1,97 +1,88 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import {
-  PlayerEntity,
-  Rect as WallRect,
-  EnvObject,
-  Vec2,
-  SonarWaveEntity,
-  ImpactSpark,
-  AmbientDust,
-  WraithEntity,
-  GhostPoint,
-} from '../types/game';
-import { DarknessLayer } from './layers/DarknessLayer';
-import { GeometryLayer } from './layers/GeometryLayer';
-import { SonarWaveLayer } from './layers/SonarWaveLayer';
-import { ParticleLayer } from './layers/ParticleLayer';
-import { DustLayer } from './layers/DustLayer';
-import { PlayerLayer } from './layers/PlayerLayer';
-import { WraithLayer } from './layers/WraithLayer';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
+import { SkiaPictureView, Skia, type SkPicture } from '@shopify/react-native-skia';
+import { LevelData } from '../types/game';
+import { buildDecor } from './art/decor';
+import { SceneRenderer, FrameState } from './skia/SceneRenderer';
 
-interface GameCanvasProps {
-  player: PlayerEntity;
-  walls: WallRect[];
-  objects: EnvObject[];
-  goal: Vec2 & { radius: number; revealedAt: number; revealStrength: number };
-  waves: SonarWaveEntity[];
-  sparks: ImpactSpark[];
-  dustParticles: AmbientDust[];
-  wraiths: WraithEntity[];
-  ghostTrack?: GhostPoint[];
-  now: number;
-  worldWidth: number;
-  worldHeight: number;
-  isHunting: boolean;
+export interface GameCanvasHandle {
+  /** Records and shows one frame. Call from the game loop — no React re-render involved. */
+  draw: (fs: FrameState) => void;
 }
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({
-    player,
-    walls,
-    objects,
-    goal,
-    waves,
-    sparks,
-    dustParticles,
-    wraiths,
-    ghostTrack,
-    now,
-    worldWidth,
-    worldHeight,
-    isHunting,
-  }) => {
-    return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {/* Layer 1: Ambient Darkness & Threat Vignette */}
-        <DarknessLayer
-          playerPos={player.pos}
-          worldWidth={worldWidth}
-          worldHeight={worldHeight}
-          isHunting={isHunting}
-        />
+interface GameCanvasProps {
+  level: LevelData;
+  worldWidth: number;
+  worldHeight: number;
+}
 
-        {/* Layer 2: Geometry (Walls, Glass, Crystals, Chasms, Goal) */}
-        <GeometryLayer
-          walls={walls}
-          objects={objects}
-          goal={goal}
-          ghostTrack={ghostTrack}
-          now={now}
-          worldWidth={worldWidth}
-          worldHeight={worldHeight}
-        />
+/** On web, add `?reveal` to the URL to switch the darkness off (art preview). */
+const REVEAL_ALL =
+  Platform.OS === 'web' && typeof window !== 'undefined' && /[?&]reveal(&|$)/.test(window.location.search);
 
-        {/* Layer 3: Sonar 4-Layer Expanding Waves */}
-        <SonarWaveLayer waves={waves} worldWidth={worldWidth} worldHeight={worldHeight} />
+/** Skia's native view API (phones only) — lets frames bypass React entirely. */
+const NATIVE_VIEW_API: { setJsiProperty: (id: number, name: string, value: unknown) => void; requestRedraw: (id: number) => void } | null =
+  Platform.OS !== 'web' && typeof globalThis !== 'undefined' && (globalThis as any).SkiaViewApi?.setJsiProperty
+    ? (globalThis as any).SkiaViewApi
+    : null;
 
-        {/* Layer 4: Returning Impact Sparks & Reverberations */}
-        <ParticleLayer sparks={sparks} worldWidth={worldWidth} worldHeight={worldHeight} />
+function emptyPicture(w: number, h: number) {
+  const rec = Skia.PictureRecorder();
+  rec.beginRecording(Skia.XYWHRect(0, 0, w, h));
+  return rec.finishRecordingAsPicture();
+}
 
-        {/* Layer 5: Ambient Drifting Dust Particles */}
-        <DustLayer dustParticles={dustParticles} worldWidth={worldWidth} worldHeight={worldHeight} />
+/**
+ * GPU-rendered game view (Skia). The heavy static maze is baked once per level;
+ * every frame the game loop calls `draw()` which records a single SkPicture and
+ * swaps it into the canvas.
+ */
+export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ level, worldWidth, worldHeight }, ref) => {
+  const renderer = useMemo(() => {
+    const decor = buildDecor(level, worldWidth, worldHeight);
+    return new SceneRenderer(decor, worldWidth, worldHeight, level.seed);
+  }, [level, worldWidth, worldHeight]);
 
-        {/* Layer 6: Player Bat Core & Momentum Arc */}
-        <PlayerLayer player={player} worldWidth={worldWidth} worldHeight={worldHeight} />
+  // Web: this small component re-renders per frame to swap the picture.
+  // Phones: frames are pushed straight to the native Skia view (no React state at all).
+  const [picture, setPicture] = useState<SkPicture>(() => emptyPicture(worldWidth, worldHeight));
+  const viewRef = useRef<SkiaPictureView>(null);
+  // Pictures that have actually been on screen, oldest first. A picture is freed only
+  // after newer ones have replaced it, so the view never draws a freed picture.
+  const shown = useRef<SkPicture[]>([]);
+  useEffect(() => {
+    shown.current.push(picture);
+    while (shown.current.length > 3) shown.current.shift()?.dispose();
+  }, [picture]);
 
-        {/* Layer 7: Wraith Edge Flares & Detected Silhouettes */}
-        <WraithLayer
-          wraiths={wraiths}
-          playerPos={player.pos}
-          now={now}
-          worldWidth={worldWidth}
-          worldHeight={worldHeight}
-        />
-      </View>
-    );
-  };
+  useImperativeHandle(
+    ref,
+    () => ({
+      draw: (fs) => {
+        const pic = renderer.render({ ...fs, revealAll: fs.revealAll || REVEAL_ALL });
+        const api = NATIVE_VIEW_API;
+        const view = viewRef.current;
+        if (api && view) {
+          api.setJsiProperty(view.nativeId, 'picture', pic);
+          api.requestRedraw(view.nativeId);
+          shown.current.push(pic);
+          while (shown.current.length > 3) shown.current.shift()?.dispose();
+        } else {
+          setPicture(pic);
+        }
+      },
+    }),
+    [renderer]
+  );
 
+  return (
+    // SkiaPictureView just shows the picture we hand it. (Skia's <Canvas> needs a newer
+    // native Skia than the one built into Expo Go, so we skip it.)
+    <SkiaPictureView
+      ref={viewRef}
+      picture={picture}
+      style={{ position: 'absolute', left: 0, top: 0, width: worldWidth, height: worldHeight }}
+      pointerEvents="none"
+    />
+  );
+});

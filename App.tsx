@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, Platform } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { GameScreenState } from './src/types/game';
@@ -11,13 +11,19 @@ import { LevelSelectScreen } from './src/screens/LevelSelectScreen';
 import { AbilitiesScreen } from './src/screens/AbilitiesScreen';
 import { EndlessScreen } from './src/screens/EndlessScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
-import { HeadphonePrompt } from './src/components/HeadphonePrompt';
+import { useAppFonts } from './src/ui/theme';
+import { AssetGalleryScreen } from './src/screens/AssetGalleryScreen';
+
+// Web-only dev shortcuts: `?gallery` shows every asset, `?level=8` jumps straight into a level.
+const WEB_QUERY = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.search : '';
+const SHOW_GALLERY = /[?&]gallery(&|$)/.test(WEB_QUERY);
+const DIRECT_LEVEL = Number((WEB_QUERY.match(/[?&]level=(\d+)/) || [])[1]) || 0;
 
 export default function App() {
-  const [screen, setScreen] = useState<GameScreenState>('HOME');
-  const [selectedLevelId, setSelectedLevelId] = useState(1);
+  const [screen, setScreen] = useState<GameScreenState>(DIRECT_LEVEL ? 'GAME' : 'HOME');
+  const [selectedLevelId, setSelectedLevelId] = useState(DIRECT_LEVEL || 1);
 
-  const { hasSeenHeadphonePrompt, setHeadphonePromptSeen } = useProgressStore();
+  useAppFonts();
 
   const handleStartGame = (levelId: number) => {
     setSelectedLevelId(levelId);
@@ -35,6 +41,8 @@ export default function App() {
     setSelectedLevelId(10);
     setScreen('GAME');
   };
+
+  if (SHOW_GALLERY) return <AssetGalleryScreen />;
 
   return (
     <SafeAreaProvider>
@@ -79,14 +87,6 @@ export default function App() {
             levelId={selectedLevelId}
             onExitToMenu={() => setScreen('HOME')}
             onNextLevel={(nextId) => setSelectedLevelId(nextId)}
-          />
-        )}
-
-        {/* First Launch Headphone Prompt */}
-        {!hasSeenHeadphonePrompt && (
-          <HeadphonePrompt
-            visible={!hasSeenHeadphonePrompt}
-            onProceed={setHeadphonePromptSeen}
           />
         )}
       </SafeAreaView>

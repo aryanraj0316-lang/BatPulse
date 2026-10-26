@@ -52,7 +52,7 @@ export const DevPanel: React.FC<DevPanelProps> = ({ visible, onClose }) => {
               <View style={styles.btnRow}>
                 <TouchableOpacity
                   style={styles.adjustBtn}
-                  onPress={() => setSonarRadius((v) => Math.max(150, v - 20))}
+                  onPress={() => setSonarRadius((v) => Math.max(60, v - 20))}
                 >
                   <Text style={styles.btnTxt}>-</Text>
                 </TouchableOpacity>

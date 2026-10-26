@@ -157,6 +157,8 @@ export class SonarSystem {
             color: PALETTE.sonarCyan,
             size: 2.2,
           });
+          // Audio only: walls echo back too (the audio engine rate-limits these)
+          if (onEchoAudio) onEchoAudio({ x: closestX, y: closestY }, dist);
         }
       }
     }

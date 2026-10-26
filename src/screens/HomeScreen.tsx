@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import Svg, { Circle, Rect } from 'react-native-svg';
-import { PALETTE } from '../constants/palette';
-import { useProgressStore } from '../state/progressStore';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
+import { Settings, Zap, Star, Gem } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useProgressStore, ABILITIES } from '../state/progressStore';
 import { useSettingsStore } from '../state/settingsStore';
 import { DevPanel } from '../components/DevPanel';
 import { DEV_KEYS } from '../constants/gameConfig';
 import { AudioEngine } from '../engine/AudioEngine';
+import { HomeArtCanvas, HomeArtHandle } from '../render/home/HomeArtCanvas';
+import { ART_W, ART_H } from '../render/home/HomeScene';
 
 interface HomeScreenProps {
   onPlay: (levelId: number) => void;
@@ -16,39 +18,46 @@ interface HomeScreenProps {
   onSettings: () => void;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const PLATE = require('../../assets/images/home-plate.jpg');
+const { width: SW, height: SH } = Dimensions.get('window');
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({
-  onPlay,
-  onLevelSelect,
-  onAbilities,
-  onEndless,
-  onSettings,
-}) => {
-  const { records, shards } = useProgressStore();
+// Fit the painting: crop at most ~7% per side, never taller than the screen; anchor to the bottom.
+const S = Math.min(SW / (ART_W * 0.86), SH / ART_H);
+const OX = (SW - ART_W * S) / 2;
+const OY = SH - ART_H * S;
+const art = (x: number, y: number, w: number, h: number) => ({ left: OX + x * S, top: OY + y * S, width: w * S, height: h * S });
+
+// Painted menu buttons (art pixels)
+const BUTTONS = [
+  { key: 'play', rect: [228, 975, 492, 93] },
+  { key: 'select', rect: [223, 1090, 497, 88] },
+  { key: 'abilities', rect: [223, 1202, 497, 88] },
+  { key: 'endless', rect: [223, 1314, 497, 88] },
+  { key: 'settings', rect: [223, 1426, 497, 88] },
+] as const;
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onPlay, onLevelSelect, onAbilities, onEndless, onSettings }) => {
+  const { records, shards, unlockedAbilities } = useProgressStore();
   const { soundEnabled, devModeUnlocked, unlockDevMode } = useSettingsStore();
-
-  const [ambientRadius, setAmbientRadius] = useState(10);
   const [tapCount, setTapCount] = useState(0);
   const [devPanelOpen, setDevPanelOpen] = useState(false);
+  const artRef = useRef<HomeArtHandle>(null);
 
-  useEffect(() => {
-    // Ambient sonar ripple crossing screen every 6 seconds
-    const interval = setInterval(() => {
-      setAmbientRadius((prev) => {
-        if (prev > SCREEN_WIDTH * 1.1) return 10;
-        return prev + 2.5;
-      });
-    }, 28);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Determine latest unlocked level
-  const unlockedLevels = Object.values(records).filter((r) => r.unlocked);
-  const latestLevelId = unlockedLevels.length > 0 ? Math.max(...unlockedLevels.map((r) => r.levelId)) : 1;
-
+  const unlocked = Object.values(records).filter((r) => r.unlocked);
+  const latestLevelId = unlocked.length > 0 ? Math.max(...unlocked.map((r) => r.levelId)) : 1;
   const totalStars = Object.values(records).reduce((sum, r) => sum + (r.stars || 0), 0);
+  const abilityTotal = Object.keys(ABILITIES).length;
+
+  const actions: Record<string, () => void> = {
+    play: () => {
+      AudioEngine.playSonarPulse(soundEnabled);
+      onPlay(latestLevelId);
+    },
+    select: onLevelSelect,
+    abilities: onAbilities,
+    endless: onEndless,
+    settings: onSettings,
+  };
 
   const handleVersionTap = () => {
     const next = tapCount + 1;
@@ -60,213 +69,82 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     }
   };
 
+  const topY = Math.max(OY + 30 * S, 34);
+
   return (
     <View style={styles.container}>
-      {/* Ambient Sonar Echolocation Wave Background */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Svg width={SCREEN_WIDTH} height={SCREEN_HEIGHT}>
-          <Circle
-            cx={SCREEN_WIDTH / 2}
-            cy={SCREEN_HEIGHT * 0.36}
-            r={ambientRadius}
-            stroke={PALETTE.sonarCyan}
-            strokeWidth={1.5}
-            fill="none"
-            opacity={Math.max(0, 0.85 - ambientRadius / (SCREEN_WIDTH * 1.1))}
-          />
-          <Circle
-            cx={SCREEN_WIDTH / 2}
-            cy={SCREEN_HEIGHT * 0.36}
-            r={Math.max(1, ambientRadius * 0.82)}
-            stroke={PALETTE.sonarCyan}
-            strokeWidth={1}
-            strokeDasharray="4, 4"
-            fill="none"
-            opacity={Math.max(0, 0.45 - ambientRadius / (SCREEN_WIDTH * 1.1))}
-          />
+      <Image source={PLATE} style={{ position: 'absolute', left: OX, top: OY, width: ART_W * S, height: ART_H * S }} />
+      {/* blend the painting into the dark where the screen is taller/wider than the art */}
+      {OY > 0 && (
+        <LinearGradient colors={['#04070A', 'rgba(4,7,10,0)']} style={{ position: 'absolute', left: 0, right: 0, top: OY - 1, height: 70 * S }} />
+      )}
 
-          {/* Faint distant cave boundary revealed by ambient ripple */}
-          <Rect
-            x={40}
-            y={SCREEN_HEIGHT * 0.2}
-            width={SCREEN_WIDTH - 80}
-            height={SCREEN_HEIGHT * 0.3}
-            stroke={PALETTE.echoTeal}
-            strokeWidth={1}
-            strokeDasharray="6, 8"
-            fill="none"
-            opacity={Math.max(0, 0.25 * (1.0 - Math.abs(ambientRadius - 160) / 100))}
-          />
-        </Svg>
-      </View>
+      <HomeArtCanvas ref={artRef} width={SW} height={SH} scale={S} offsetX={OX} offsetY={OY} />
 
-      {/* Header instrumentation block */}
-      <View style={styles.header}>
-        <View style={styles.badgeRow}>
-          <Text style={styles.terminalTag}>ACOUSTIC SENSORY INTERFACE · v2.0</Text>
-          <Text style={styles.shardCountText}>✦ {shards} SHARDS</Text>
-        </View>
-
-        <Text style={styles.title}>BATS VIEW</Text>
-        <Text style={styles.subtitle}>SEE THE WORLD THROUGH SOUND</Text>
-
-        <View style={styles.statsBadge}>
-          <Text style={styles.statsText}>★ {totalStars} STARS ACQUIRED</Text>
-        </View>
-      </View>
-
-      {/* Menu Options */}
-      <View style={styles.menuGroup}>
-        <TouchableOpacity
-          style={styles.primaryPlayButton}
+      {BUTTONS.map((b) => (
+        <Pressable
+          key={b.key}
+          style={({ pressed }) => [styles.hit, art(b.rect[0], b.rect[1], b.rect[2], b.rect[3]), pressed && styles.hitPressed]}
           onPress={() => {
-            AudioEngine.playSonarPulse(soundEnabled);
-            onPlay(latestLevelId);
+            artRef.current?.flap();
+            actions[b.key]();
           }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.primaryPlayText}>
-            DEPLOY ECHO {latestLevelId.toString().padStart(2, '0')} ▶
-          </Text>
-        </TouchableOpacity>
+        />
+      ))}
 
-        <TouchableOpacity style={styles.menuButton} onPress={onLevelSelect} activeOpacity={0.7}>
-          <Text style={styles.menuButtonText}>≡ SELECT ECHO CHAMBER</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuButton} onPress={onAbilities} activeOpacity={0.7}>
-          <Text style={styles.menuButtonText}>✦ ABILITY LOADOUT ({shards} SHARDS)</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuButton} onPress={onEndless} activeOpacity={0.7}>
-          <Text style={styles.menuButtonText}>▼ ENDLESS & DAILY DESCENT</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuButton} onPress={onSettings} activeOpacity={0.7}>
-          <Text style={styles.menuButtonText}>⚙ SETTINGS & CALIBRATION</Text>
-        </TouchableOpacity>
+      <View style={[styles.topBar, { top: topY }]}>
+        <Pressable onPress={onSettings} hitSlop={8} style={({ pressed }) => [styles.gear, pressed && { opacity: 0.7 }]}>
+          <Settings size={20} color="#8FB4D8" />
+        </Pressable>
+        <View style={styles.chip}>
+          <Zap size={15} color="#FFC24A" fill="#FFC24A" />
+          <Text style={styles.chipText}>{`${unlockedAbilities.length}/${abilityTotal}`}</Text>
+          <View style={styles.sep} />
+          <Star size={15} color="#FFC24A" fill="#FFC24A" />
+          <Text style={styles.chipText}>{totalStars}</Text>
+          <View style={styles.sep} />
+          <Gem size={15} color="#4DA8FF" fill="#1F5FB8" />
+          <Text style={styles.chipText}>{shards}</Text>
+        </View>
       </View>
 
-      {/* Version Tag */}
-      <TouchableOpacity style={styles.footer} onPress={handleVersionTap} activeOpacity={0.9}>
-        <Text style={styles.versionText}>
-          SEC-SYS PROTOCOL 2.0.4 {devModeUnlocked ? '· [DEV TUNING ACTIVE]' : ''}
-        </Text>
-      </TouchableOpacity>
+      <Pressable onPress={handleVersionTap} hitSlop={10} style={styles.version}>
+        <Text style={styles.versionText}>{devModeUnlocked ? 'DEV · ' : ''}v2.0.0</Text>
+      </Pressable>
 
-      {/* Live Engine Tuning Panel */}
       {devPanelOpen && <DevPanel visible={devPanelOpen} onClose={() => setDevPanelOpen(false)} />}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: PALETTE.voidBlack,
-    justifyContent: 'space-between',
+  container: { flex: 1, backgroundColor: '#04070A', overflow: 'hidden' },
+  hit: { position: 'absolute', borderRadius: 6 },
+  hitPressed: { backgroundColor: 'rgba(77,170,255,0.12)', borderWidth: 1, borderColor: 'rgba(110,190,255,0.55)' },
+  topBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  gear: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(110,150,190,0.55)',
+    backgroundColor: 'rgba(8,14,22,0.75)',
     alignItems: 'center',
-    paddingVertical: 45,
-    paddingHorizontal: 24,
+    justifyContent: 'center',
   },
-  header: {
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  badgeRow: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    maxWidth: 320,
-    marginBottom: 16,
-  },
-  terminalTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#64748B',
-    letterSpacing: 1.5,
-  },
-  shardCountText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: PALETTE.shardGold,
-    letterSpacing: 1,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 4,
-    textShadowColor: PALETTE.sonarCyan,
-    textShadowRadius: 14,
-  },
-  subtitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: PALETTE.sonarCyan,
-    letterSpacing: 2.2,
-    marginTop: 6,
-  },
-  statsBadge: {
-    marginTop: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 4,
+    gap: 6,
+    paddingHorizontal: 14,
+    height: 36,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 201, 107, 0.3)',
-    backgroundColor: 'rgba(255, 201, 107, 0.05)',
+    borderColor: 'rgba(110,150,190,0.55)',
+    backgroundColor: 'rgba(8,14,22,0.78)',
   },
-  statsText: {
-    fontSize: 10,
-    color: PALETTE.shardGold,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  menuGroup: {
-    width: '100%',
-    maxWidth: 320,
-    gap: 10,
-  },
-  primaryPlayButton: {
-    width: '100%',
-    paddingVertical: 15,
-    borderRadius: 6,
-    alignItems: 'center',
-    backgroundColor: PALETTE.sonarCyan,
-    shadowColor: PALETTE.sonarCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-  },
-  primaryPlayText: {
-    color: '#04060A',
-    fontWeight: '900',
-    fontSize: 13,
-    letterSpacing: 2,
-  },
-  menuButton: {
-    width: '100%',
-    paddingVertical: 13,
-    borderRadius: 6,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  menuButtonText: {
-    color: '#E2E8F0',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 1.5,
-  },
-  footer: {
-    alignItems: 'center',
-  },
-  versionText: {
-    fontSize: 9,
-    color: '#475569',
-    fontWeight: '600',
-    letterSpacing: 1.5,
-  },
+  chipText: { color: '#D8E2EC', fontSize: 15, fontFamily: 'Cinzel_600SemiBold' },
+  sep: { width: 1, height: 18, backgroundColor: 'rgba(110,150,190,0.4)', marginHorizontal: 6 },
+  version: { position: 'absolute', right: 16, bottom: 14 },
+  versionText: { color: '#6F8194', fontSize: 11, fontFamily: 'Cinzel_600SemiBold' },
 });
