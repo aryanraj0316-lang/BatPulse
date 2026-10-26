@@ -4,3 +4,6 @@ dist/
 build/
 .env
 .DS_Store
+credentials.json
+*.keystore
+*.jks
