@@ -4,6 +4,8 @@ import { SkiaPictureView, Skia, type SkPicture } from '@shopify/react-native-ski
 import { LevelData } from '../types/game';
 import { buildDecor } from './art/decor';
 import { SceneRenderer, FrameState } from './skia/SceneRenderer';
+import { biomeForLevel } from './themes/biomes';
+import { applyBiome } from './themes/applyBiome';
 
 export interface GameCanvasHandle {
   /** Records and shows one frame. Call from the game loop — no React re-render involved. */
@@ -39,8 +41,10 @@ function emptyPicture(w: number, h: number) {
  */
 export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(({ level, worldWidth, worldHeight }, ref) => {
   const renderer = useMemo(() => {
+    const biome = biomeForLevel(level.id);
+    applyBiome(biome); // repaint the shared palette first: decor + bakes read it
     const decor = buildDecor(level, worldWidth, worldHeight);
-    return new SceneRenderer(decor, worldWidth, worldHeight, level.seed);
+    return new SceneRenderer(decor, worldWidth, worldHeight, level.seed, biome);
   }, [level, worldWidth, worldHeight]);
 
   // Web: this small component re-renders per frame to swap the picture.

@@ -20,7 +20,8 @@ import {
   additive,
   rgba,
 } from '../sk';
-import { drawPortcullis, drawPressurePlate, drawSpikeBlock, drawKey, drawExitPad } from '../sprites';
+import { drawPortcullis, drawPressurePlate, drawKey, drawExitPad } from '../sprites';
+import { drawCrusher, drawRift } from './TwistLayer';
 import { ART } from '../../art/kit';
 import { G } from '../sk';
 
@@ -40,6 +41,10 @@ const hashId = (s: string) => {
 // Performance: static parts recorded once as pictures, only the moving bits drawn live
 // ═════════════════════════════════════════════════════════════
 const picCache = new Map<string, SkPicture>();
+/** Drop recorded hazard pictures (after the biome palette changes). */
+export function clearHazardPics() {
+  picCache.clear();
+}
 function pic(key: string, half: number, draw: (c: SkCanvas) => void): SkPicture {
   let p = picCache.get(key);
   if (!p) {
@@ -287,6 +292,7 @@ export function drawFlatHazards(c: SkCanvas, decor: LevelDecor, objects: EnvObje
     if (o.collected) continue;
     if (o.type === 'chasm') drawWater(c, o.x, o.y, o.width, o.height, t, hashId(o.id));
     else if (o.type === 'pressure_plate') drawPressurePlate(c, o.x, o.y, o.width, o.height, t, o.lastHitTime ? t - o.lastHitTime : -1);
+    else if (o.type === 'rift') drawRift(c, o, t, o.id.endsWith('b') ? 1 : 0, false);
   }
   // exit pad with a cyan underglow
   const size = clamp(decor.cellMin * 0.72, 28, 50);
@@ -320,7 +326,7 @@ export function drawRaisedHazards(c: SkCanvas, objects: EnvObject[], t: number) 
         drawPortcullis(c, o.x, o.y, o.width, o.height, o.state === 'open', t);
         break;
       case 'moving_wall':
-        drawSpikeBlock(c, o.x, o.y, o.width, o.height);
+        drawCrusher(c, o, t, THEME.lanternGlass);
         break;
     }
   }

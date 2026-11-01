@@ -11,7 +11,8 @@ export class MovementSystem {
     input: Vec2, // Joystick input (-1 to 1)
     whisperStepEquipped: boolean,
     deltaTime: number,
-    now: number
+    now: number,
+    speedMult = 1
   ): {
     deltaPos: Vec2;
     isSprinting: boolean;
@@ -32,7 +33,7 @@ export class MovementSystem {
       const dirY = input.y / magnitude;
 
       // Target velocity
-      const targetSpeed = GAME_CONFIG.PLAYER_SPEED * Math.min(1.0, magnitude);
+      const targetSpeed = GAME_CONFIG.PLAYER_SPEED * speedMult * Math.min(1.0, magnitude);
       const targetVx = dirX * targetSpeed;
       const targetVy = dirY * targetSpeed;
 

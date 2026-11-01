@@ -1,5 +1,6 @@
 import { Skia, type SkCanvas, type SkImage, type SkPath } from '@shopify/react-native-skia';
 import { ART, f, makeRng, blobD, circleD } from '../art/kit';
+import { THEME } from './theme';
 import type { BushDecor, VineDecor } from '../art/decor';
 import { fill, stroke, shaded, strokeShaded, glow, linear, radialAt, svgPath, svgPathOnce, rect, rrect, G, beginAlpha } from './sk';
 
@@ -469,7 +470,7 @@ export function paintBush(c: SkCanvas, b: BushDecor) {
     [b.mid, ART.moss, 1],
     [b.light, ART.mossLight, 1],
     [b.tips, ART.leafTip, 0.75],
-    [b.berries, '#B3263A', 0.9],
+    [b.berries, THEME.berry, 0.9],
   ];
   for (const [d, color, a] of layers) {
     const p = P(d);
@@ -479,7 +480,7 @@ export function paintBush(c: SkCanvas, b: BushDecor) {
 
 export function paintVine(c: SkCanvas, v: VineDecor) {
   const stem = svgPathOnce(v.stem);
-  if (stem) c.drawPath(stem, stroke('#2A4A1B', 0.9, 1, true));
+  if (stem) c.drawPath(stem, stroke(THEME.vineStem, 0.9, 1, true));
   const l = svgPathOnce(v.leaves);
   if (l) c.drawPath(l, fill(ART.moss));
   const ll = svgPathOnce(v.leavesLight);

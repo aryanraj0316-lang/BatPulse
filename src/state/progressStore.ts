@@ -1,39 +1,41 @@
 import { create } from 'zustand';
 import { LevelRecord, AbilityId, AbilityInfo, GhostPoint } from '../types/game';
+import { loadJSON, saveJSON } from './storage';
+import { SKIN_BY_ID, SkinId, skinStatus } from '../skins/skins';
 
 export const ABILITIES: Record<AbilityId, AbilityInfo> = {
   WIDE_PULSE: {
     id: 'WIDE_PULSE',
     name: 'Wide Pulse',
-    description: '1.4× radius, but 1.3× cost in Wraith hearing audibility',
+    description: 'Your sonar rings reach 40% farther.',
     cost: 40,
     unlocked: false,
   },
   PIERCING_PING: {
     id: 'PIERCING_PING',
     name: 'Piercing Ping',
-    description: 'Sonar wave passes through the first solid wall it strikes',
+    description: 'Sonar passes through the first wall it hits.',
     cost: 75,
     unlocked: false,
   },
   RICOCHET: {
     id: 'RICOCHET',
     name: 'Ricochet',
-    description: 'Sonar wave bounces once off surfaces, revealing around corners',
+    description: 'Each pulse echoes down the longest corridors, lighting what lies around the corner.',
     cost: 120,
     unlocked: false,
   },
   WHISPER_STEP: {
     id: 'WHISPER_STEP',
     name: 'Whisper Step',
-    description: 'Movement noise and sprint footstep volume reduced by 60%',
+    description: 'Fly faster before wraiths hear your wingbeats.',
     cost: 90,
     unlocked: false,
   },
   SIXTH_SENSE: {
     id: 'SIXTH_SENSE',
     name: 'Sixth Sense',
-    description: 'Faint pulse-free directional hint toward the goal, once per run',
+    description: 'The exit glows for a moment when each level begins.',
     cost: 150,
     unlocked: false,
   },
@@ -46,7 +48,13 @@ interface ProgressState {
   unlockedAbilities: AbilityId[];
   endlessHighScore: number;
   dailyBestDepth: number;
+  /** day number (days since epoch) dailyBestDepth belongs to */
+  dailyDay: number;
+  endlessRuns: number;
   hasSeenHeadphonePrompt: boolean;
+  /** skins bought with shards (others unlock automatically from progress) */
+  ownedSkins: SkinId[];
+  equippedSkin: SkinId;
 
   // Actions
   addShards: (amount: number) => void;
@@ -57,42 +65,49 @@ interface ProgressState {
     stars: number,
     ghostRun: boolean,
     perfectEcho: boolean,
-    ghostTrack?: GhostPoint[]
+    ghostTrack?: GhostPoint[],
+    shardMult?: number
   ) => { isNewBest: boolean; shardsEarned: number };
+  buySkin: (id: SkinId) => boolean;
+  equipSkin: (id: SkinId) => boolean;
   unlockAbility: (id: AbilityId) => boolean;
   toggleEquipAbility: (id: AbilityId) => void;
   recordEndlessScore: (depth: number) => boolean;
+  recordDailyScore: (day: number, depth: number) => boolean;
   setHeadphonePromptSeen: () => void;
 }
 
 const STORAGE_KEY = 'bats_view_v2_progress';
 
-const loadSavedState = (): Partial<ProgressState> => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const data = window.localStorage.getItem(STORAGE_KEY);
-      if (data) return JSON.parse(data);
-    }
-  } catch {}
-  return {};
-};
+const loadSavedState = (): Partial<ProgressState> => loadJSON<Partial<ProgressState>>(STORAGE_KEY) ?? {};
 
 const saveState = (state: ProgressState) => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const data = JSON.stringify({
-        shards: state.shards,
-        records: state.records,
-        equippedAbilities: state.equippedAbilities,
-        unlockedAbilities: state.unlockedAbilities,
-        endlessHighScore: state.endlessHighScore,
-        dailyBestDepth: state.dailyBestDepth,
-        hasSeenHeadphonePrompt: state.hasSeenHeadphonePrompt,
-      });
-      window.localStorage.setItem(STORAGE_KEY, data);
-    }
-  } catch {}
+  saveJSON(STORAGE_KEY, {
+    shards: state.shards,
+    records: state.records,
+    equippedAbilities: state.equippedAbilities,
+    unlockedAbilities: state.unlockedAbilities,
+    endlessHighScore: state.endlessHighScore,
+    dailyBestDepth: state.dailyBestDepth,
+    dailyDay: state.dailyDay,
+    endlessRuns: state.endlessRuns,
+    hasSeenHeadphonePrompt: state.hasSeenHeadphonePrompt,
+    ownedSkins: state.ownedSkins,
+    equippedSkin: state.equippedSkin,
+  });
 };
+
+/** Inputs for skin unlock checks, derived from saved progress. */
+export function skinProgress(state: Pick<ProgressState, 'records' | 'shards' | 'ownedSkins'>) {
+  const recs = Object.values(state.records);
+  return {
+    owned: state.ownedSkins,
+    shards: state.shards,
+    highestCleared: recs.reduce((m, r) => (r.completed ? Math.max(m, r.levelId) : m), 0),
+    stars: recs.reduce((sum, r) => sum + (r.stars || 0), 0),
+    ghostRuns: recs.filter((r) => r.ghostRun).length,
+  };
+}
 
 const initialSaved = loadSavedState();
 
@@ -105,7 +120,11 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
   unlockedAbilities: initialSaved.unlockedAbilities ?? [],
   endlessHighScore: initialSaved.endlessHighScore ?? 0,
   dailyBestDepth: initialSaved.dailyBestDepth ?? 0,
+  dailyDay: initialSaved.dailyDay ?? 0,
+  endlessRuns: initialSaved.endlessRuns ?? 0,
   hasSeenHeadphonePrompt: initialSaved.hasSeenHeadphonePrompt ?? false,
+  ownedSkins: initialSaved.ownedSkins ?? ['dusk'],
+  equippedSkin: (initialSaved.equippedSkin && SKIN_BY_ID[initialSaved.equippedSkin] ? initialSaved.equippedSkin : 'dusk') as SkinId,
 
   addShards: (amount) => {
     set((state) => {
@@ -115,7 +134,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
     });
   },
 
-  recordLevelVictory: (levelId, timeSeconds, sonarUsed, stars, ghostRun, perfectEcho, ghostTrack) => {
+  recordLevelVictory: (levelId, timeSeconds, sonarUsed, stars, ghostRun, perfectEcho, ghostTrack, shardMult = 1) => {
     const state = get();
     const existing = state.records[levelId] || {
       levelId,
@@ -136,7 +155,7 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
     // Shard reward: 15 per newly earned star + 25 first clear
     const newStars = Math.max(0, stars - existing.stars);
     const firstClear = !existing.completed;
-    const shardsEarned = newStars * 15 + (firstClear ? 25 : 0) + (ghostRun ? 10 : 0);
+    const shardsEarned = Math.round((newStars * 15 + (firstClear ? 25 : 0) + (ghostRun ? 10 : 0)) * shardMult);
 
     const updatedRecord: LevelRecord = {
       levelId,
@@ -217,13 +236,41 @@ export const useProgressStore = create<ProgressState>((set, get) => ({
 
   recordEndlessScore: (depth) => {
     const state = get();
-    if (depth > state.endlessHighScore) {
-      const nextState = { ...state, endlessHighScore: depth };
-      saveState(nextState);
-      set(nextState);
-      return true;
-    }
-    return false;
+    const isBest = depth > state.endlessHighScore;
+    const nextState = { ...state, endlessRuns: state.endlessRuns + 1, endlessHighScore: Math.max(state.endlessHighScore, depth) };
+    saveState(nextState);
+    set(nextState);
+    return isBest;
+  },
+
+  recordDailyScore: (day, depth) => {
+    const state = get();
+    const prev = state.dailyDay === day ? state.dailyBestDepth : 0;
+    const nextState = { ...state, dailyDay: day, dailyBestDepth: Math.max(prev, depth) };
+    saveState(nextState);
+    set(nextState);
+    return depth > prev;
+  },
+
+  buySkin: (id) => {
+    const state = get();
+    const skin = SKIN_BY_ID[id];
+    if (!skin || state.ownedSkins.includes(id) || skin.unlock.kind !== 'shards') return false;
+    if (state.shards < skin.unlock.value) return false;
+    const nextState = { ...state, shards: state.shards - skin.unlock.value, ownedSkins: [...state.ownedSkins, id], equippedSkin: id };
+    saveState(nextState);
+    set(nextState);
+    return true;
+  },
+
+  equipSkin: (id) => {
+    const state = get();
+    const skin = SKIN_BY_ID[id];
+    if (!skin || skinStatus(skin, skinProgress(state)).state !== 'owned') return false;
+    const nextState = { ...state, equippedSkin: id };
+    saveState(nextState);
+    set(nextState);
+    return true;
   },
 
   setHeadphonePromptSeen: () => {

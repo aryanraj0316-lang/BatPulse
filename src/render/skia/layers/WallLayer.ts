@@ -62,7 +62,7 @@ function masonryShader(scale: number, seed: number): SkShader | null {
       }
       // weathered top-left highlight on each block
       const hl = svgPathOnce(`M${x + 1},${y + rowH - 1.2}V${y + 1}H${x + bw - 1.2}`);
-      if (hl) c.drawPath(hl, stroke('#8C98A8', 0.5, 0.45));
+      if (hl) c.drawPath(hl, stroke(THEME.wallCapHighlight, 0.5, 0.45));
       if (rng.chance(0.3)) c.drawCircle(x + rng.range(2, bw - 2), y + rng.range(1.5, rowH - 1.5), rng.range(0.3, 0.7), fill('#000000', 0.45));
       x += bw;
     }
@@ -74,9 +74,9 @@ function masonryShader(scale: number, seed: number): SkShader | null {
   return img.makeShaderOptions(TileMode.Repeat, TileMode.Repeat, FilterMode.Linear, MipmapMode.None, m);
 }
 
-export function bakeWalls(c: SkCanvas, decor: LevelDecor, scale: number, seed: number) {
+export function bakeWalls(c: SkCanvas, decor: LevelDecor, scale: number, seed: number): SkPath | null {
   const union = wallUnion(decor);
-  if (!union) return;
+  if (!union) return null;
   const facet = decor.facet;
   const at = (dx: number, dy: number, paint: ReturnType<typeof fill>) => {
     c.save();
@@ -117,7 +117,7 @@ export function bakeWalls(c: SkCanvas, decor: LevelDecor, scale: number, seed: n
     for (let i = 0; i < n; i++) {
       const px = horizontal ? w.x + rng.range(0, w.width) : w.x + w.width / 2;
       const py = horizontal ? w.y + w.height / 2 : w.y + rng.range(0, w.height);
-      c.drawCircle(px, py, rng.range(4, 9), blurred(fill(rng.chance(0.6) ? '#000000' : '#A0AEC0', rng.range(0.08, 0.18)), 3, HQ));
+      c.drawCircle(px, py, rng.range(4, 9), blurred(fill(rng.chance(0.6) ? '#000000' : THEME.wallWeatherLight, rng.range(0.08, 0.18)), 3, HQ));
     }
   }
   // 4. Bevels: light inner edge on top/left, dark inner edge on bottom/right
@@ -152,7 +152,7 @@ export function bakeWalls(c: SkCanvas, decor: LevelDecor, scale: number, seed: n
     c.drawPath(p, fill(tones[i]));
   });
   const ivyTop = svgPathOnce(decor.ivy[3]);
-  if (ivyTop) c.drawPath(ivyTop, stroke('#A8D36E', 0.4, 0.35));
+  if (ivyTop) c.drawPath(ivyTop, stroke(THEME.ivySheen, 0.4, 0.35));
   const berries = svgPathOnce(decor.ivyBerries);
   if (berries) c.drawPath(berries, fill(THEME.berry));
 
@@ -177,4 +177,5 @@ export function bakeWalls(c: SkCanvas, decor: LevelDecor, scale: number, seed: n
         break;
     }
   }
+  return union;
 }

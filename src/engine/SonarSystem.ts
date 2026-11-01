@@ -34,7 +34,7 @@ export class SonarSystem {
     const candidateWalls = spatialGrid.queryRadius(origin, maxRadius);
     const allObstacles = [
       ...candidateWalls,
-      ...objects.filter((o) => o.type !== 'dust_field' && o.type !== 'sonar_shard'),
+      ...objects.filter((o) => o.type !== 'dust_field' && o.type !== 'sonar_shard' && o.type !== 'rift'),
     ];
 
     const stepSize = 7.0;
@@ -84,6 +84,34 @@ export class SonarSystem {
     }
 
     return { hitDistances, hitObjects };
+  }
+
+  /**
+   * Ricochet: the ends of the longest open corridors around `origin`, where a bounced echo
+   * would light up what's around the corner. At most `count` points, spread at least 50° apart.
+   */
+  static ricochetPoints(
+    origin: Vec2,
+    maxRadius: number,
+    spatialGrid: SpatialHashGrid,
+    objects: EnvObject[],
+    count = 3
+  ): { x: number; y: number; dist: number }[] {
+    const reach = maxRadius * 1.6;
+    const { hitDistances } = SonarSystem.castRays(origin, reach, spatialGrid, objects, false);
+    const order = Array.from({ length: RAY_COUNT }, (_, i) => i).sort((a, b) => hitDistances[b] - hitDistances[a]);
+    const minGap = Math.ceil((RAY_COUNT * 50) / 360);
+    const picked: number[] = [];
+    for (const r of order) {
+      if (picked.length >= count) break;
+      if (hitDistances[r] < 90) break; // nothing worth bouncing into
+      if (picked.some((p) => Math.min(Math.abs(p - r), RAY_COUNT - Math.abs(p - r)) < minGap)) continue;
+      picked.push(r);
+    }
+    return picked.map((r) => {
+      const d = Math.max(20, hitDistances[r] - 14);
+      return { x: origin.x + COS_TABLE[r] * d, y: origin.y + SIN_TABLE[r] * d, dist: d };
+    });
   }
 
   /**

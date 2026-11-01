@@ -11,7 +11,7 @@ import {
   GhostPoint,
 } from '../../types/game';
 import { GAME_CONFIG } from '../../constants/gameConfig';
-import { HunterAI } from '../../engine/HunterAI';
+import { THEME } from './theme';
 import { LevelDecor } from '../art/decor';
 import { ART, clamp, easeOutQuart } from '../art/kit';
 import { fill, stroke, shaded, glow, linear, rect, svgPathOnce, G, beginAlpha, radial, radialAt } from './sk';
@@ -23,6 +23,10 @@ import { drawLanternFixture, drawLanternLight, drawLanternWallTint, drawLanternF
 import { drawGrateHQ } from './layers/HazardLayer';
 import { drawVisionCone, drawSonarRings, drawSparksAndDust } from './layers/EntityLayer';
 import { drawBatRig, type BatReactions } from './layers/bat';
+import { BIOMES, type Biome } from '../themes/biomes';
+import { buildBiomeDecor, prepareBiomePaths, bakeBiomeFloor, bakeBiomeWalls, drawFixtureBase, drawFixturesLive, drawBiomeLive, drawBiomeEdges, Atmosphere, type BiomeDecor, type BiomePaths } from './layers/BiomeLayer';
+import { drawCrusherBeacon, drawRift } from './layers/TwistLayer';
+import type { SkinDef } from '../../skins/skins';
 
 export interface JoystickState {
   center: Vec2;
@@ -54,13 +58,15 @@ export interface FrameState {
   joystick: JoystickState | null;
   revealAll?: boolean;
   batFx?: BatFx;
+  /** the player's equipped skin */
+  skin?: SkinDef;
 }
 
 /** How much of a reveal zone is open right now: radius + strength (0..1). */
 export function zoneState(z: RevealZone, now: number) {
   const age = now - z.createdAt;
   const expand = GAME_CONFIG.SONAR_EXPAND_DURATION * 1000;
-  const hold = GAME_CONFIG.REVEAL_HOLD_MS;
+  const hold = z.hold ?? GAME_CONFIG.REVEAL_HOLD_MS;
   const fade = GAME_CONFIG.REVEAL_FADE_MS;
   if (age < expand) return { r: z.maxRadius * easeOutQuart(age / expand), s: z.intensity, age };
   if (age < expand + hold) return { r: z.maxRadius, s: z.intensity, age };
@@ -133,26 +139,37 @@ export class SceneRenderer {
   private imagePaint = Skia.Paint();
   private ghostSrc: GhostPoint[] | null = null;
   private ghostPath: ReturnType<typeof svgPathOnce> = null;
+  private bd: BiomeDecor;
+  private bp: BiomePaths;
+  private atmos: Atmosphere;
 
-  constructor(private decor: LevelDecor, private w: number, private h: number, seed = 1) {
+  constructor(private decor: LevelDecor, private w: number, private h: number, seed = 1, private biome: Biome = BIOMES[0]) {
     this.bounds = Skia.XYWHRect(0, 0, w, h);
     this.holePaint.setAntiAlias(true);
     this.holePaint.setBlendMode(BlendMode.DstOut);
     this.holePaint.setShader(G.hole());
-    this.darkPaint.setColor(Skia.Color('#010205'));
+    this.darkPaint.setColor(Skia.Color(THEME.darkness));
     this.darkPaint.setAlphaf(GAME_CONFIG.DARKNESS_OPACITY);
 
     const scale = Math.min(2.5, Math.max(1, PixelRatio.get()));
+    this.bd = buildBiomeDecor(biome, decor, w, h, seed);
+    this.bp = prepareBiomePaths(this.bd);
+    this.atmos = new Atmosphere(biome.atmos, w, h, seed);
     this.floorImage = this.bakeLayer(scale, false, (c) => {
       bakeFloor(c, decor, w, h, scale, seed);
+      bakeBiomeFloor(c, this.bd);
       bakeBorder(c, decor, w, h);
       for (const pr of decor.props) if (pr.kind === 'grate') drawGrateHQ(c, pr.x, pr.y, pr.s, 0, pr.seed);
       drawLanternLight(c, decor, 0, 1); // warm pools on the floor (walls' shadows fall over them)
     });
     this.wallImage = this.bakeLayer(scale, true, (c) => {
-      bakeWalls(c, decor, scale, seed);
+      const union = bakeWalls(c, decor, scale, seed);
+      bakeBiomeWalls(c, this.bd, union);
       drawLanternWallTint(c, decor); // warm light on the stone, only where walls are
-      for (const l of decor.lanterns) drawLanternFixture(c, l, 0);
+      for (const l of decor.lanterns) {
+        if (biome.light === 'lantern') drawLanternFixture(c, l, 0);
+        else drawFixtureBase(c, l, biome.light);
+      }
     });
     this.bushSprites = decor.bushes.map((b) => bake(b.r * 1.35 + 4, scale, (c) => paintBush(c, b)));
     this.vineSprites = decor.vines.map((v) => bake(22, scale, (c) => paintVine(c, v)));
@@ -180,7 +197,7 @@ export class SceneRenderer {
     this.drawWorld(c, fs, zones);
     if (!fs.revealAll) this.drawDarkness(c, fs, zones);
     this.drawAboveDark(c, fs, zones);
-    if (fs.joystick) drawJoystick(c, fs.joystick);
+    if (fs.joystick?.active) drawJoystick(c, fs.joystick);
     return this.recorder.finishRecordingAsPicture();
   }
 
@@ -203,8 +220,11 @@ export class SceneRenderer {
       const s = this.bushSprites[i];
       if (s) drawSprite(c, s, b.x, b.y, Math.sin(t * 0.0011 + b.phase) * 2.4);
     });
+    // 9b: biome life — lava in the cracks, breathing fungi, turning runes, caustics
+    drawBiomeLive(c, this.bd, this.bp, t, this.w, this.h);
     // 10: live light — a small flickering glow at each lantern + the sonar wash on the floor
     drawLanternFlicker(c, decor, t);
+    drawFixturesLive(c, decor.lanterns, this.biome.light, t);
     drawSonarFloorLight(c, zones.map((q) => ({ z: q.z, r: q.r, a: q.s })), t);
     // 11: player-centred vignette
     drawVignette(c, fs.player.pos, this.w, this.h);
@@ -232,6 +252,17 @@ export class SceneRenderer {
   private drawAboveDark(c: SkCanvas, fs: FrameState, zones: { z: RevealZone; r: number; age: number }[]) {
     const t = fs.now;
     const { player } = fs;
+
+    // Biome atmosphere + edge ambience (faint, visible even in the dark)
+    drawBiomeEdges(c, this.biome, this.w, this.h, t);
+    this.atmos.draw(c, t);
+    // Twist beacons: crushers can be timed and rifts found without a pulse
+    if (!fs.revealAll) {
+      for (const o of fs.objects) {
+        if (o.type === 'moving_wall') drawCrusherBeacon(c, o, t, THEME.lanternGlass);
+        else if (o.type === 'rift') drawRift(c, o, t, o.id.endsWith('b') ? 1 : 0, true);
+      }
+    }
 
     // Ghost of your best run (path built once per recorded track, not every frame)
     if (fs.ghostTrack && fs.ghostTrack.length > 1) {
@@ -281,7 +312,7 @@ export class SceneRenderer {
       const vis = fs.revealAll ? 1 : Math.max(pingVis, nearVis);
       if (vis <= 0.01) continue;
       beginAlpha(c, vis);
-      drawVisionCone(c, w.pos.x, w.pos.y, look, 1, t, frenzy);
+      drawVisionCone(c, w.pos.x, w.pos.y, look, 1, t, frenzy, w.visionScale ?? 1);
       glow(c, G.red(), w.pos.x, w.pos.y, w.radius * 1.9, 0.6);
       drawBatRig(c, {
         key: w,
@@ -311,7 +342,7 @@ export class SceneRenderer {
     };
     const speed = Math.hypot(player.velocity.x, player.velocity.y) / GAME_CONFIG.PLAYER_SPEED;
     const pm = advance(player, fs.now, speed, (player.rotation * 180) / Math.PI + 90, false, react.fear);
-    drawBatAura(c, player.pos, t);
+    drawBatAura(c, player.pos, t, fs.skin?.fx.aura, fs.skin?.fx.auraStrength);
     drawBatRig(c, {
       key: player,
       x: player.pos.x,
@@ -326,14 +357,8 @@ export class SceneRenderer {
       glide: pm.glide,
       speed,
       react,
+      skin: fs.skin,
     });
-
-    // Threat flare at the screen edge toward a nearby wraith
-    for (const w of fs.wraiths) {
-      const info = HunterAI.getDistortionInfo(w, player.pos, this.w, this.h);
-      if (!info.active) continue;
-      glow(c, G.red(), info.edgeX, info.edgeY, 30 + 50 * info.intensity, info.intensity * (0.6 + 0.25 * Math.sin(t * 0.012)));
-    }
 
     // Being hunted: pulsing red vignette
     if (fs.isHunting) {

@@ -34,6 +34,8 @@ export const GAME_CONFIG = {
   // Lock & key: the exit is sealed behind laser barriers until the key is collected
   LOCK_AND_KEY: true,
   LOCK_FIRST_LEVEL: 3,
+  CRUSHER_FIRST_LEVEL: 41, // twist: sweeping crusher blocks in corridors
+  RIFT_FIRST_LEVEL: 51, // twist: linked rift portals
   HUD_SAFE_TOP: 110, // px — keys are never placed under the HUD bar / dev buttons
   // Sonar reload: at or below this many pulses the sonar starts recharging, one pulse at a time, until full
   SONAR_RELOAD_BELOW: 2,

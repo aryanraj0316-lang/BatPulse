@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
 import { Settings, Zap, Star, Gem } from 'lucide-react-native';
@@ -9,6 +10,11 @@ import { DEV_KEYS } from '../constants/gameConfig';
 import { AudioEngine } from '../engine/AudioEngine';
 import { HomeArtCanvas, HomeArtHandle } from '../render/home/HomeArtCanvas';
 import { ART_W, ART_H } from '../render/home/HomeScene';
+import { SkinPreview } from '../render/skins/SkinPreview';
+import { SKINS, skinOf, skinStatus } from '../skins/skins';
+import { skinProgress } from '../state/progressStore';
+
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 interface HomeScreenProps {
   onPlay: (levelId: number) => void;
@@ -16,6 +22,7 @@ interface HomeScreenProps {
   onAbilities: () => void;
   onEndless: () => void;
   onSettings: () => void;
+  onSkins: () => void;
 }
 
 const PLATE = require('../../assets/images/home-plate.jpg');
@@ -36,8 +43,11 @@ const BUTTONS = [
   { key: 'settings', rect: [223, 1426, 497, 88] },
 ] as const;
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onPlay, onLevelSelect, onAbilities, onEndless, onSettings }) => {
-  const { records, shards, unlockedAbilities } = useProgressStore();
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onPlay, onLevelSelect, onAbilities, onEndless, onSettings, onSkins }) => {
+  const progress = useProgressStore();
+  const { records, shards, unlockedAbilities, equippedSkin } = progress;
+  const prog = skinProgress(progress);
+  const skinReady = SKINS.some((s) => skinStatus(s, prog).state === 'ready');
   const { soundEnabled, devModeUnlocked, unlockDevMode } = useSettingsStore();
   const [tapCount, setTapCount] = useState(0);
   const [devPanelOpen, setDevPanelOpen] = useState(false);
@@ -93,9 +103,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onPlay, onLevelSelect, o
       ))}
 
       <View style={[styles.topBar, { top: topY }]}>
-        <Pressable onPress={onSettings} hitSlop={8} style={({ pressed }) => [styles.gear, pressed && { opacity: 0.7 }]}>
-          <Settings size={20} color="#8FB4D8" />
-        </Pressable>
+        <View style={styles.leftGroup}>
+          <Pressable onPress={onSettings} hitSlop={8} style={({ pressed }) => [styles.gear, pressed && { opacity: 0.7 }]}>
+            <Settings size={20} color="#8FB4D8" />
+          </Pressable>
+          <Pressable onPress={onSkins} hitSlop={6} style={({ pressed }) => [styles.roost, skinReady && styles.roostReady, pressed && { opacity: 0.75 }]}>
+            <SkinPreview skin={skinOf(equippedSkin)} width={38} height={38} animated={false} bare />
+            <Text style={styles.roostText}>ROOST</Text>
+            {skinReady && <View style={styles.roostDot} />}
+          </Pressable>
+        </View>
         <View style={styles.chip}>
           <Zap size={15} color="#FFC24A" fill="#FFC24A" />
           <Text style={styles.chipText}>{`${unlockedAbilities.length}/${abilityTotal}`}</Text>
@@ -109,7 +126,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onPlay, onLevelSelect, o
       </View>
 
       <Pressable onPress={handleVersionTap} hitSlop={10} style={styles.version}>
-        <Text style={styles.versionText}>{devModeUnlocked ? 'DEV · ' : ''}v2.0.0</Text>
+        <Text style={styles.versionText}>{devModeUnlocked ? 'DEV · ' : ''}v{APP_VERSION}</Text>
       </Pressable>
 
       {devPanelOpen && <DevPanel visible={devPanelOpen} onClose={() => setDevPanelOpen(false)} />}
@@ -122,6 +139,21 @@ const styles = StyleSheet.create({
   hit: { position: 'absolute', borderRadius: 6 },
   hitPressed: { backgroundColor: 'rgba(77,170,255,0.12)', borderWidth: 1, borderColor: 'rgba(110,190,255,0.55)' },
   topBar: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  leftGroup: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  roost: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    paddingRight: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(110,150,190,0.55)',
+    backgroundColor: 'rgba(8,14,22,0.78)',
+    overflow: 'visible',
+  },
+  roostReady: { borderColor: '#FFC24A', shadowColor: '#FFC24A', shadowOpacity: 0.7, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  roostText: { color: '#D8E2EC', fontSize: 12, fontFamily: 'Cinzel_600SemiBold', letterSpacing: 1.5 },
+  roostDot: { position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: 5, backgroundColor: '#FFC24A', borderWidth: 1, borderColor: '#04070A' },
   gear: {
     width: 40,
     height: 40,

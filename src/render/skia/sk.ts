@@ -117,6 +117,11 @@ export function beginAlpha(c: SkCanvas, a: number) {
 type Stop = [offset: number, hex: string, alpha: number];
 const shaderCache = new Map<string, SkShader>();
 
+/** Forget every cached gradient (call after the colour theme changes). */
+export function clearShaderCache() {
+  shaderCache.clear();
+}
+
 /** Unit radial gradient centred at (0,0), radius 1. Draw with translate+scale. */
 export function radial(key: string, stops: Stop[]): SkShader {
   let s = shaderCache.get(key);

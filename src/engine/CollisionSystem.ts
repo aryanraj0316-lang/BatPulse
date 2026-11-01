@@ -1,4 +1,5 @@
 import { Vec2, Rect, EnvObject, PlayerEntity } from '../types/game';
+import { crusherJaws } from './crusher';
 
 export class CollisionSystem {
   /**
@@ -23,7 +24,8 @@ export class CollisionSystem {
       ...walls,
       ...objects.filter((obj) => {
         if (obj.type === 'glass_wall') return obj.state !== 'open';
-        if (obj.type === 'wall' || obj.type === 'moving_wall') return true;
+        // (moving walls are crushers now: deadly to touch, never pushed against — see checkCrusher)
+        if (obj.type === 'wall') return true;
         if (obj.type === 'resonance_gate' && obj.state !== 'open') return true;
         return false;
       }),
@@ -158,6 +160,28 @@ export class CollisionSystem {
     return null;
   }
 
+  /** Did the bat touch a crusher? (slightly forgiving: the art's teeth stick out a bit) */
+  static checkCrusher(playerPos: Vec2, radius: number, objects: EnvObject[], now: number): boolean {
+    for (const obj of objects) {
+      if (obj.type !== 'moving_wall' || obj.travelDistance) continue;
+      for (const jaw of crusherJaws(obj, now)) {
+        if (jaw.width > 0.5 && jaw.height > 0.5 && this.checkCircleAABB(playerPos, radius * 0.8, jaw)) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Rift the bat is inside right now (null if none). */
+  static checkRift(playerPos: Vec2, objects: EnvObject[]): EnvObject | null {
+    for (const obj of objects) {
+      if (obj.type !== 'rift') continue;
+      const cx = obj.x + obj.width / 2;
+      const cy = obj.y + obj.height / 2;
+      if (Math.hypot(playerPos.x - cx, playerPos.y - cy) < Math.min(obj.width, obj.height) * 0.42) return obj;
+    }
+    return null;
+  }
+
   /**
    * Checks if player reached the Goal beacon
    */
@@ -174,7 +198,8 @@ export class CollisionSystem {
   static updateMovingWalls(objects: EnvObject[], now: number): void {
     for (const obj of objects) {
       if (obj.type === 'moving_wall' && obj.initialPos && obj.travelDistance && obj.cycleDuration) {
-        const t = (now % obj.cycleDuration) / obj.cycleDuration;
+        const cyc = obj.cycleDuration;
+        const t = ((((now + (obj.phaseOffset || 0)) % cyc) + cyc) % cyc) / cyc;
         const pingPong = Math.sin(t * Math.PI * 2) * 0.5 + 0.5; // 0 to 1
         const offset = pingPong * obj.travelDistance;
 

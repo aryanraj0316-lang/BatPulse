@@ -52,7 +52,7 @@ export function drawLanternLight(c: SkCanvas, decor: LevelDecor, t: number, stre
     [0.55, THEME.lanternGlowMid, THEME.lanternGlowStrength * 0.1],
     [1, THEME.lanternGlowMid, 0],
   ]);
-  const hot = radial('lanternHot', [[0, '#FFE6A0', 0.55], [1, '#FFA726', 0]]);
+  const hot = radial('lanternHot', [[0, THEME.lanternHot, 0.55], [1, THEME.lanternGlowCenter, 0]]);
   for (const l of decor.lanterns) {
     const fl = lanternFlicker(t, l.seed);
     c.save();
@@ -105,12 +105,12 @@ export function drawVignette(c: SkCanvas, center: Vec2, w: number, h: number) {
 }
 
 /** Soft cyan aura on the floor directly beneath the bat. */
-export function drawBatAura(c: SkCanvas, p: Vec2, t: number) {
-  const a = THEME.batAuraStrength * (0.9 + 0.1 * Math.sin(t * 0.003));
+export function drawBatAura(c: SkCanvas, p: Vec2, t: number, color: string = THEME.batAura, strength: number = THEME.batAuraStrength) {
+  const a = strength * (0.9 + 0.1 * Math.sin(t * 0.003));
   c.save();
   c.translate(p.x, p.y + 3);
   c.scale(30, 30);
-  c.drawCircle(0, 0, 1, additive(shaded(radial('batAura', [[0, THEME.batAura, 0.8], [0.45, THEME.batAura, 0.25], [1, THEME.batAura, 0]]), a), 'plus'));
+  c.drawCircle(0, 0, 1, additive(shaded(radial(`batAura${color}`, [[0, color, 0.8], [0.45, color, 0.25], [1, color, 0]]), a), 'plus'));
   c.restore();
 }
 
@@ -135,7 +135,7 @@ export function drawLanternWallTint(c: SkCanvas, decor: LevelDecor) {
 
 /** Live: one small flickering glow per lantern (everything else about the light is baked). */
 export function drawLanternFlicker(c: SkCanvas, decor: LevelDecor, t: number) {
-  const hot = radial('lanternHot', [[0, '#FFE6A0', 0.55], [1, '#FFA726', 0]]);
+  const hot = radial('lanternHot', [[0, THEME.lanternHot, 0.55], [1, THEME.lanternGlowCenter, 0]]);
   for (const l of decor.lanterns) {
     const fl = lanternFlicker(t, l.seed);
     c.save();

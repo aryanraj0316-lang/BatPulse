@@ -4,7 +4,8 @@ import { MazeBraider } from '../maze/braider';
 import { RoomCarver } from '../maze/roomCarver';
 import { MazeMesher } from '../maze/mesher';
 import { Pathfinding, NodeCoord } from '../maze/pathfinding';
-import { LEVEL_PRESETS, LevelPreset } from './params';
+import { LEVEL_PRESETS, LevelPreset, LEVEL_NAMES, CHAPTER_HINTS } from './params';
+import { biomeForLevel, CAMPAIGN_LEVELS } from '../render/themes/biomes';
 import { GAME_CONFIG } from '../constants/gameConfig';
 
 export class LevelFactory {
@@ -41,10 +42,13 @@ export class LevelFactory {
       RoomCarver.carveRooms(grid, preset.roomCount, rng);
     }
 
-    // 4. Determine Spawn & Goal at maximum BFS distance
-    const startCoord: NodeCoord = { col: 0, row: rows - 1 };
-    const farthest = Pathfinding.findFarthestCell(grid, startCoord);
-    const goalCoord = farthest.cell;
+    // 4. Spawn & exit. The bat starts somewhere new in every level (seeded, so a level always
+    //    plays the same) and the exit sits far away along the maze, never under the HUD.
+    const lrng = new SeededRNG(seed ^ 0x5ba7);
+    const safeRow = (r: number) => (r + 0.5) * cellH >= GAME_CONFIG.HUD_SAFE_TOP;
+    const { startCoord, goalCoord } = this.pickStartAndGoal(grid, cellW, cellH, safeRow, lrng);
+    const key = (c: number, r: number) => `${c},${r}`;
+    const cellOf = (o: EnvObject) => key(Math.floor((o.x + o.width / 2) / cellW), Math.floor((o.y + o.height / 2) / cellH));
 
     const spawn: Vec2 = {
       x: startCoord.col * cellW + cellW / 2,
@@ -93,7 +97,15 @@ export class LevelFactory {
         }
         return false;
       };
-      if (!keepsRoute(chasmC, chasmR)) {
+      // Strategic pit: drop it on the direct route (middle stretch) when a detour exists,
+      // so the obvious path is a trap and the player has to find the loop around it.
+      const direct = this.route(grid, startCoord, goalCoord, new Set());
+      const middle = lrng.shuffle(direct.slice(Math.floor(direct.length * 0.3), Math.ceil(direct.length * 0.7)));
+      const onRoute = middle.find((n) => safeRow(n.row) && keepsRoute(n.col, n.row));
+      if (onRoute) {
+        chasmC = onRoute.col;
+        chasmR = onRoute.row;
+      } else if (!keepsRoute(chasmC, chasmR)) {
         let best: { c: number; r: number; d: number } | null = null;
         for (let r = 2; r <= rows - 3; r++)
           for (let c = 1; c <= cols - 2; c++) {
@@ -129,8 +141,16 @@ export class LevelFactory {
 
     if (preset.id >= 8) {
       // Add Echo Crystal in an open chamber
-      const crystalC = rng.rangeInt(1, cols - 2);
-      const crystalR = rng.rangeInt(1, rows - 2);
+      let crystalC = rng.rangeInt(1, cols - 2);
+      let crystalR = rng.rangeInt(1, rows - 2);
+      // Midway between spawn and exit, off the direct route: a ping into it lights the far half
+      const pick = this.pickCell(grid, startCoord, goalCoord, objects.map(cellOf), lrng, (c) =>
+        c.fromStart >= c.total * 0.35 && c.fromStart <= c.total * 0.65 && c.offRoute >= 1 && safeRow(c.row)
+      );
+      if (pick) {
+        crystalC = pick.col;
+        crystalR = pick.row;
+      }
       objects.push({
         id: `crystal_${objId++}`,
         type: 'echo_crystal',
@@ -146,8 +166,17 @@ export class LevelFactory {
 
     // Add 1-2 Sonar Shards (+1 pulse reward)
     if (preset.sonarAllowance < 999) {
-      const shardC = rng.rangeInt(1, cols - 2);
-      const shardR = rng.rangeInt(1, rows - 2);
+      let shardC = rng.rangeInt(1, cols - 2);
+      let shardR = rng.rangeInt(1, rows - 2);
+      // Reward for a short detour: tucked 2-3 steps off the route, not right next to the spawn
+      const taken = [...objects.map(cellOf), key(startCoord.col, startCoord.row), key(goalCoord.col, goalCoord.row)];
+      const pick =
+        this.pickCell(grid, startCoord, goalCoord, taken, lrng, (c) => c.offRoute >= 2 && c.offRoute <= 3 && c.fromStart >= 3 && safeRow(c.row)) ??
+        this.pickCell(grid, startCoord, goalCoord, taken, lrng, (c) => c.offRoute >= 1 && c.fromStart >= 2 && safeRow(c.row));
+      if (pick) {
+        shardC = pick.col;
+        shardR = pick.row;
+      }
       objects.push({
         id: `shard_${objId++}`,
         type: 'sonar_shard',
@@ -205,6 +234,79 @@ export class LevelFactory {
       }
     }
 
+    // 6c. Late-game twists (few, and only high up): crushers from 41, rifts from 51
+    if (preset.id >= GAME_CONFIG.CRUSHER_FIRST_LEVEL) {
+      const blocked = new Set(objects.filter((o) => o.type === 'chasm').map(cellOf));
+      const route = this.route(grid, startCoord, goalCoord, blocked);
+      const want = preset.id >= GAME_CONFIG.RIFT_FIRST_LEVEL ? 2 : 1;
+      const takenNow = new Set([...objects.map(cellOf), key(startCoord.col, startCoord.row), key(goalCoord.col, goalCoord.row)]);
+      const picks = lrng.shuffle(route.slice(Math.max(3, Math.floor(route.length * 0.25)), Math.ceil(route.length * 0.8)));
+      const used: NodeCoord[] = [];
+      for (const n of picks) {
+        if (used.length >= want) break;
+        const k = key(n.col, n.row);
+        if (takenNow.has(k) || used.some((u) => Math.abs(u.col - n.col) + Math.abs(u.row - n.row) < 3)) continue;
+        const w = grid[n.row][n.col].walls;
+        const horizontal = !w.left && !w.right && w.top && w.bottom; // corridor runs left↔right
+        const vertical = !w.top && !w.bottom && w.left && w.right; // corridor runs up↕down
+        if ((!horizontal && !vertical) || !safeRow(n.row)) continue;
+        // a strip across the corridor; its two jaws hide in the walls and slam shut in the middle
+        const span = (horizontal ? cellH : cellW) - 8;
+        const thick = Math.min((horizontal ? cellW : cellH) * 0.3, 13);
+        const x0 = n.col * cellW;
+        const y0 = n.row * cellH;
+        const x = horizontal ? x0 + cellW / 2 - thick / 2 : x0 + 4;
+        const y = horizontal ? y0 + 4 : y0 + cellH / 2 - thick / 2;
+        objects.push({
+          id: `crusher_${objId++}`,
+          type: 'moving_wall',
+          x,
+          y,
+          width: horizontal ? thick : span,
+          height: horizontal ? span : thick,
+          axis: horizontal ? 'vertical' : 'horizontal',
+          cycleDuration: Math.round(lrng.range(2800, 3600)),
+          phaseOffset: Math.round(lrng.range(0, 3000)),
+          revealedAt: 0,
+          revealStrength: 0,
+          lastPingDistance: 0,
+        });
+        used.push(n);
+        takenNow.add(k);
+      }
+    }
+    if (preset.id >= GAME_CONFIG.RIFT_FIRST_LEVEL) {
+      const taken = [...objects.map(cellOf), key(startCoord.col, startCoord.row), key(goalCoord.col, goalCoord.row)];
+      const { dist: fromGoal } = this.bfs(grid, [goalCoord], new Set());
+      // entrance: a short detour near the start · exit: deep in the maze, off the main route
+      const a = this.pickCell(grid, startCoord, goalCoord, taken, lrng, (c) => c.fromStart >= 2 && c.fromStart <= Math.max(4, c.total * 0.3) && c.offRoute >= 1 && c.offRoute <= 2 && safeRow(c.row));
+      if (a) {
+        const minFar = Math.min(cols * cellW, rows * cellH) * 0.4;
+        const b = this.pickCell(grid, startCoord, goalCoord, [...taken, key(a.col, a.row)], lrng, (c) =>
+          c.fromStart >= c.total * 0.6 && (fromGoal.get(key(c.col, c.row)) ?? 0) >= 2 && c.offRoute >= 1 && safeRow(c.row) &&
+          Math.hypot((c.col - a.col) * cellW, (c.row - a.row) * cellH) >= minFar
+        );
+        if (b) {
+          const size = Math.min(cellW, cellH) * 0.62;
+          const n = objId++;
+          for (const [end, twin, sfx] of [[a, 'b', 'a'], [b, 'a', 'b']] as const) {
+            objects.push({
+              id: `rift_${n}_${sfx}`,
+              type: 'rift',
+              pairId: `rift_${n}_${twin}`,
+              x: end.col * cellW + cellW / 2 - size / 2,
+              y: end.row * cellH + cellH / 2 - size / 2,
+              width: size,
+              height: size,
+              revealedAt: 0,
+              revealStrength: 0,
+              lastPingDistance: 0,
+            });
+          }
+        }
+      }
+    }
+
     // 7. Place Wraith hunters spread evenly over the map: each one as far as possible from
     //    the spawn, the exit and the other hunters (farthest-point placement). Cells holding
     //    another object (water, lasers, crystals, orbs) are skipped. Uses its own RNG so every
@@ -221,7 +323,21 @@ export class LevelFactory {
       // points the hunters keep away from: spawn + exit, then each placed hunter
       const keepAway: Vec2[] = [spawn, { x: goal.x, y: goal.y }];
       const speeds = [1.0, 0.9, 0.9, 0.9];
-      for (let n = 0; n < preset.hunterCount; n++) {
+      // The first hunter lurks beside the route, part-way along it: you have to sneak past
+      // (or route around) it instead of it sitting in a far corner you never visit.
+      const lurk = this.pickCell(grid, startCoord, goalCoord, [...taken], hrng, (c) =>
+        c.offRoute >= 1 && c.offRoute <= 2 &&
+        c.fromStart >= Math.max(4, c.total * 0.35) && c.fromStart <= c.total * 0.8 &&
+        !(cols > 4 && rows > 4 && (c.col === 0 || c.row === 0 || c.col === cols - 1 || c.row === rows - 1)) &&
+        Math.hypot((c.col - startCoord.col) * cellW, (c.row - startCoord.row) * cellH) > Math.max(cellW, cellH) * 2.5
+      );
+      if (lurk) {
+        const p = centre(lurk.col, lurk.row);
+        hunters.push({ anchor: p, speedMultiplier: speeds[0] });
+        keepAway.push(p);
+        taken.add(key(lurk.col, lurk.row));
+      }
+      for (let n = hunters.length; n < preset.hunterCount; n++) {
         let best: Vec2 | null = null;
         let bestScore = -1;
         for (let r = 0; r < rows; r++) {
@@ -268,6 +384,126 @@ export class LevelFactory {
       difficulty: preset.difficulty,
       hint: preset.hint,
     };
+  }
+
+  /** BFS over open cell sides, skipping `blocked` cells. Returns distances and parents. */
+  private static bfs(grid: GridCell[][], from: NodeCoord[], blocked: Set<string>) {
+    const rows = grid.length;
+    const cols = grid[0].length;
+    const dist = new Map<string, number>();
+    const parent = new Map<string, NodeCoord>();
+    const q: NodeCoord[] = [];
+    for (const f of from) {
+      dist.set(`${f.col},${f.row}`, 0);
+      q.push(f);
+    }
+    while (q.length) {
+      const cur = q.shift()!;
+      const d = dist.get(`${cur.col},${cur.row}`)!;
+      const w = grid[cur.row][cur.col].walls;
+      const steps: [boolean, number, number][] = [[!w.top, 0, -1], [!w.right, 1, 0], [!w.bottom, 0, 1], [!w.left, -1, 0]];
+      for (const [open, dc, dr] of steps) {
+        const nc = cur.col + dc;
+        const nr = cur.row + dr;
+        if (!open || nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+        const k = `${nc},${nr}`;
+        if (dist.has(k) || blocked.has(k)) continue;
+        dist.set(k, d + 1);
+        parent.set(k, cur);
+        q.push({ col: nc, row: nr });
+      }
+    }
+    return { dist, parent };
+  }
+
+  /** Shortest route of cells from `a` to `b` (inclusive), or [] if unreachable. */
+  private static route(grid: GridCell[][], a: NodeCoord, b: NodeCoord, blocked: Set<string>): NodeCoord[] {
+    const { parent, dist } = this.bfs(grid, [a], blocked);
+    if (!dist.has(`${b.col},${b.row}`)) return [];
+    const path: NodeCoord[] = [b];
+    let cur = b;
+    while (cur.col !== a.col || cur.row !== a.row) {
+      cur = parent.get(`${cur.col},${cur.row}`)!;
+      path.push(cur);
+    }
+    return path.reverse();
+  }
+
+  /**
+   * Spawn: a few seeded random candidates (below the HUD); keep the ones with the longest
+   * journeys and choose among them. Exit: a random cell in the far 15% of that journey.
+   */
+  private static pickStartAndGoal(
+    grid: GridCell[][],
+    cellW: number,
+    cellH: number,
+    safeRow: (r: number) => boolean,
+    rng: SeededRNG
+  ): { startCoord: NodeCoord; goalCoord: NodeCoord } {
+    const rows = grid.length;
+    const cols = grid[0].length;
+    const cells: NodeCoord[] = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (safeRow(r)) cells.push({ col: c, row: r });
+    if (!cells.length) cells.push({ col: 0, row: rows - 1 });
+
+    const tries = rng.shuffle(cells).slice(0, 14).map((start) => {
+      const { dist } = this.bfs(grid, [start], new Set());
+      let max = 0;
+      dist.forEach((d, k) => {
+        if (safeRow(Number(k.split(',')[1]))) max = Math.max(max, d);
+      });
+      return { start, dist, max };
+    });
+    tries.sort((a, b) => b.max - a.max);
+    const pick = tries[Math.floor(rng.next() * Math.min(3, tries.length))];
+
+    const minFar = Math.min(cols * cellW, rows * cellH) * 0.45; // also far apart on screen
+    const goals: NodeCoord[] = [];
+    pick.dist.forEach((d, k) => {
+      const [col, row] = k.split(',').map(Number);
+      if (!safeRow(row) || d < pick.max * 0.85) return;
+      if (Math.hypot((col - pick.start.col) * cellW, (row - pick.start.row) * cellH) < minFar) return;
+      goals.push({ col, row });
+    });
+    let goalCoord: NodeCoord | null = goals.length ? rng.choice(goals) : null;
+    if (!goalCoord) {
+      // fall back to the single farthest safe cell
+      let best = -1;
+      pick.dist.forEach((d, k) => {
+        const [col, row] = k.split(',').map(Number);
+        if (safeRow(row) && d > best && (col !== pick.start.col || row !== pick.start.row)) {
+          best = d;
+          goalCoord = { col, row };
+        }
+      });
+    }
+    return { startCoord: pick.start, goalCoord: goalCoord ?? Pathfinding.findFarthestCell(grid, pick.start).cell };
+  }
+
+  /**
+   * Random cell (seeded) matching `ok`. Each candidate knows its maze distance from the spawn,
+   * the spawn->exit route length, and how many steps it is off that route.
+   */
+  private static pickCell(
+    grid: GridCell[][],
+    start: NodeCoord,
+    goal: NodeCoord,
+    taken: string[],
+    rng: SeededRNG,
+    ok: (c: { col: number; row: number; fromStart: number; total: number; offRoute: number }) => boolean
+  ): NodeCoord | null {
+    const takenSet = new Set(taken);
+    const { dist: fromStart } = this.bfs(grid, [start], new Set());
+    const total = fromStart.get(`${goal.col},${goal.row}`) ?? 0;
+    const path = this.route(grid, start, goal, new Set());
+    const { dist: offRoute } = this.bfs(grid, path.length ? path : [start], new Set());
+    const out: NodeCoord[] = [];
+    fromStart.forEach((d, k) => {
+      if (takenSet.has(k)) return;
+      const [col, row] = k.split(',').map(Number);
+      if (ok({ col, row, fromStart: d, total, offRoute: offRoute.get(k) ?? 0 })) out.push({ col, row });
+    });
+    return out.length ? rng.choice(out) : null;
   }
 
   /**
@@ -339,11 +575,15 @@ export class LevelFactory {
     const cols = Math.min(GAME_CONFIG.MAX_GRID_COLS, 7 + Math.floor(levelId / 12));
     const rows = Math.min(GAME_CONFIG.MAX_GRID_ROWS, 10 + Math.floor(levelId / 8));
     const hunterCount = levelId > 20 ? 2 : 1;
+    const biome = biomeForLevel(levelId);
+    const chapter = Math.floor((levelId - 1) / 10);
+    const named = LEVEL_NAMES[levelId - 9];
+    const beyond = levelId > CAMPAIGN_LEVELS;
 
     return {
       id: levelId,
-      name: `Echo Chamber ${levelId.toString().padStart(2, '0')}`,
-      subtitle: `Abyssal Depth ${levelId * 40}m`,
+      name: named ?? `${beyond ? 'Beyond' : 'Echo'} · ${biome.name.replace('The ', '')} ${levelId}`,
+      subtitle: beyond ? `${biome.name} · Abyssal Depth ${levelId * 40}m` : biome.name,
       cols,
       rows,
       braidFactor: 0.55, // more loops, fewer dead ends: cleaner and easier
@@ -353,7 +593,7 @@ export class LevelFactory {
       parSonar: Math.max(3, 5 - Math.floor(levelId / 10)),
       hunterCount,
       difficulty: tier,
-      hint: 'Plan several moves ahead. The Wraith is listening.',
+      hint: CHAPTER_HINTS[Math.min(chapter, CHAPTER_HINTS.length - 1)] ?? CHAPTER_HINTS[0],
     };
   }
 }

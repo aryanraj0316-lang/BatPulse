@@ -125,7 +125,7 @@ export class HunterAI {
     const dx = playerPos.x - w.pos.x;
     const dy = playerPos.y - w.pos.y;
     const dist = Math.hypot(dx, dy);
-    if (dist > GAME_CONFIG.HUNTER_VISION_RANGE + playerRadius * 0.6) return false;
+    if (dist > GAME_CONFIG.HUNTER_VISION_RANGE * (w.visionScale ?? 1) + playerRadius * 0.6) return false;
     if (dist > 1) {
       const off = Math.abs(wrapAngle(Math.atan2(dy, dx) - w.facing));
       // the bat's body counts, not just its centre

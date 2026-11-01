@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from
 import { LevelFactory } from '../levels/generated';
 import { ART } from '../render/art/kit';
 
-const MAX_LEVEL = 30;
+const MAX_LEVEL = 70;
 const { width: SW, height: SH } = Dimensions.get('window');
 
 interface DevLevelPickerProps {
@@ -22,6 +22,8 @@ function describe(levelId: number) {
   if (count('key')) tags.push('key + locked exit');
   if (count('echo_crystal')) tags.push('crystal');
   if (count('sonar_shard')) tags.push('orb');
+  if (count('moving_wall')) tags.push(`${count('moving_wall')} crusher${count('moving_wall') > 1 ? 's' : ''}`);
+  if (count('rift')) tags.push('rifts');
   return {
     id: levelId,
     name: lvl.name,

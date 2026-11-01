@@ -1,275 +1,222 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { PALETTE } from '../constants/palette';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Lamp, Waves, Flame, Snowflake, Sprout, Sparkles, Lock, Star, Infinity as InfinityIcon, Swords } from 'lucide-react-native';
 import { useProgressStore } from '../state/progressStore';
-import { LEVEL_PRESETS } from '../levels/params';
+import { LEVEL_PRESETS, LEVEL_NAMES } from '../levels/params';
+import { BIOMES, CHAPTER_SIZE, CAMPAIGN_LEVELS, biomeForLevel, type BiomeId } from '../render/themes/biomes';
+import { MenuBackground } from '../ui/Chrome';
+import { CarvedHeader } from '../ui/Frame';
+import { UI } from '../ui/theme';
+import { GAME_CONFIG } from '../constants/gameConfig';
+import { LiveCanvas } from '../render/LiveCanvas';
+import { drawChapterBanner } from '../render/menuScenes';
 
 interface LevelSelectScreenProps {
   onSelectLevel: (levelId: number) => void;
   onBack: () => void;
 }
 
+const { width: SW } = Dimensions.get('window');
+const COLS = 5;
+const CARD_W = SW - 32;
+const BANNER_H = 96;
+const GAP = 8;
+const TILE = Math.floor((SW - 32 - 24 - GAP * (COLS - 1)) / COLS);
+
+const ICONS: Record<BiomeId, typeof Lamp> = { crypt: Lamp, grotto: Waves, forge: Flame, frost: Snowflake, fungal: Sprout, astral: Sparkles };
+
+export function levelName(id: number) {
+  return LEVEL_PRESETS.find((p) => p.id === id)?.name ?? LEVEL_NAMES[id - 9] ?? `Echo ${id}`;
+}
+
 export const LevelSelectScreen: React.FC<LevelSelectScreenProps> = ({ onSelectLevel, onBack }) => {
-  const { records, shards } = useProgressStore();
+  const { records } = useProgressStore();
+  const unlocked = (id: number) => id === 1 || !!records[id]?.unlocked;
+  const highestUnlocked = useMemo(() => Object.values(records).reduce((m, r) => (r.unlocked ? Math.max(m, r.levelId) : m), 1), [records]);
+  const totalStars = Object.values(records).reduce((s, r) => s + (r.stars || 0), 0);
+  const beyond = highestUnlocked > CAMPAIGN_LEVELS ? Array.from({ length: highestUnlocked - CAMPAIGN_LEVELS }, (_, i) => CAMPAIGN_LEVELS + 1 + i) : [];
+
+  const tile = (id: number, accent: string, soft: string) => {
+    const rec = records[id];
+    const open = unlocked(id);
+    const stars = rec?.stars ?? 0;
+    const current = open && !rec?.completed;
+    return (
+      <Pressable
+        key={id}
+        disabled={!open}
+        onPress={() => onSelectLevel(id)}
+        style={({ pressed }) => [
+          styles.tile,
+          {
+            borderColor: current ? accent : open ? `${accent}66` : 'rgba(120,130,145,0.18)',
+            backgroundColor: open ? 'rgba(8,12,18,0.82)' : 'rgba(5,7,10,0.6)',
+            transform: [{ scale: pressed ? 0.94 : 1 }],
+            shadowColor: accent,
+            shadowOpacity: current ? 0.8 : 0,
+          },
+        ]}
+      >
+        {current && <LinearGradient colors={[`${accent}40`, 'rgba(0,0,0,0)']} style={StyleSheet.absoluteFill} />}
+        {open ? (
+          <>
+            <Text style={[styles.tileNum, { color: rec?.completed ? '#EEF2F6' : soft }]}>{id}</Text>
+            <View style={styles.tileStars}>
+              {[1, 2, 3].map((k) => (
+                <Star key={k} size={8} color={k <= stars ? '#FFC24A' : '#3A4250'} fill={k <= stars ? '#FFC24A' : '#3A4250'} strokeWidth={1} />
+              ))}
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.tileNum, { color: '#4A5462', fontSize: 15 }]}>{id}</Text>
+            <Lock size={10} color="#4A5462" />
+          </>
+        )}
+      </Pressable>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
-          <Text style={styles.backBtnText}>← BACK</Text>
-        </TouchableOpacity>
-
-        <View style={styles.headerCenter}>
-          <Text style={styles.title}>ECHO CHAMBERS</Text>
-          <Text style={styles.subtitle}>ACOUSTIC ARCHIVES</Text>
-        </View>
-
-        <Text style={styles.shardCount}>✦ {shards}</Text>
-      </View>
-
-      {/* Levels Scroll List */}
-      <ScrollView contentContainerStyle={styles.scrollList} showsVerticalScrollIndicator={false}>
-        {LEVEL_PRESETS.map((preset) => {
-          const record = records[preset.id] || {
-            levelId: preset.id,
-            unlocked: preset.id === 1,
-            completed: false,
-            stars: 0,
-            bestTime: null,
-            bestSonarUsed: null,
-            ghostRun: false,
-            perfectEcho: false,
-          };
-
-          const isUnlocked = record.unlocked;
-
+      <MenuBackground dim />
+      <CarvedHeader
+        title="ECHO CHAMBERS"
+        subtitle={`${totalStars} / ${CAMPAIGN_LEVELS * 3} STARS`}
+        onBack={onBack}
+        right={
+          <View style={styles.starChip}>
+            <Star size={13} color="#FFC24A" fill="#FFC24A" />
+            <Text style={styles.starChipText}>{totalStars}</Text>
+          </View>
+        }
+      />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {BIOMES.map((b) => {
+          const first = b.index * CHAPTER_SIZE + 1;
+          const ids = Array.from({ length: CHAPTER_SIZE }, (_, i) => first + i);
+          const open = unlocked(first);
+          const stars = ids.reduce((s, id) => s + (records[id]?.stars ?? 0), 0);
+          const cleared = ids.filter((id) => records[id]?.completed).length;
+          const Icon = ICONS[b.id] ?? Lamp;
+          const twist =
+            first >= GAME_CONFIG.RIFT_FIRST_LEVEL ? 'Crushers · Rifts' : first >= GAME_CONFIG.CRUSHER_FIRST_LEVEL ? 'Crushers' : null;
           return (
-            <TouchableOpacity
-              key={preset.id}
-              style={[
-                styles.card,
-                {
-                  borderColor: isUnlocked
-                    ? record.completed
-                      ? PALETTE.sonarCyan
-                      : 'rgba(255, 255, 255, 0.2)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  backgroundColor: isUnlocked ? 'rgba(8, 13, 22, 0.7)' : 'rgba(5, 7, 12, 0.4)',
-                  opacity: isUnlocked ? 1.0 : 0.45,
-                },
-              ]}
-              disabled={!isUnlocked}
-              onPress={() => onSelectLevel(preset.id)}
-              activeOpacity={0.75}
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.numberRow}>
-                  <Text
-                    style={[
-                      styles.levelNum,
-                      { color: isUnlocked ? PALETTE.sonarCyan : '#64748B' },
-                    ]}
-                  >
-                    ECHO {preset.id.toString().padStart(2, '0')}
-                  </Text>
-                  {preset.hunterCount > 0 && (
-                    <Text style={styles.hunterTag}>⚠ {preset.hunterCount} WRAITH</Text>
-                  )}
-                  {record.ghostRun && (
-                    <Text style={styles.ghostTag}>🦇 GHOST</Text>
-                  )}
-                </View>
-
-                {/* Stars Display */}
-                {isUnlocked ? (
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3].map((starIdx) => (
-                      <Text
-                        key={starIdx}
-                        style={[
-                          styles.star,
-                          {
-                            color:
-                              starIdx <= record.stars
-                                ? PALETTE.shardGold
-                                : 'rgba(255,255,255,0.15)',
-                          },
-                        ]}
-                      >
-                        ★
-                      </Text>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={styles.lockTag}>🔒 LOCKED</Text>
-                )}
+            <View key={b.id} style={[styles.chapter, { borderColor: open ? `${b.ui.accent}70` : 'rgba(120,130,145,0.2)', opacity: open ? 1 : 0.62 }]}>
+              <LinearGradient colors={[`${b.ui.deep}`, 'rgba(6,9,13,0.94)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              {/* painted corridor of this biome, animated */}
+              <View style={styles.banner} pointerEvents="none">
+                <LiveCanvas width={CARD_W - 2} height={BANNER_H} fps={24} animated={open} deps={[open]} draw={(c, t, w, h) => drawChapterBanner(c, t, w, h, b, !open)} />
+                <Text style={[styles.bannerNum, { color: b.ui.soft, textShadowColor: b.ui.accent }]}>{b.numeral}</Text>
               </View>
-
-              <Text style={styles.cardTitle}>{preset.name.toUpperCase()}</Text>
-              <Text style={styles.cardSubtitle}>{preset.subtitle}</Text>
-
-              {preset.hint && (
-                <Text style={styles.hintText}>{preset.hint}</Text>
-              )}
-
-              {/* Best Record Footer */}
-              {isUnlocked && record.completed && (
-                <View style={styles.cardFooter}>
-                  <Text style={styles.recordStat}>
-                    ⚡ Best: {Math.floor(record.bestTime || 0)}s (Par {preset.parTime}s)
+              <View style={styles.chapterHead}>
+                <View style={[styles.emblem, { borderColor: b.ui.accent, shadowColor: b.ui.accent }]}>
+                  <Icon size={20} color={b.ui.soft} strokeWidth={1.8} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.chapterNum, { color: b.ui.accent }]}>
+                    CHAPTER {b.numeral} · {first}–{first + CHAPTER_SIZE - 1}
                   </Text>
-                  <Text style={styles.recordStat}>
-                    📡 Sonar: {record.bestSonarUsed} / {preset.sonarAllowance}
-                  </Text>
+                  <Text style={styles.chapterName}>{b.name.toUpperCase()}</Text>
+                  <Text style={styles.chapterTag}>{b.tagline}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <View style={styles.chapterStars}>
+                    <Star size={11} color="#FFC24A" fill="#FFC24A" />
+                    <Text style={styles.chapterStarsText}>
+                      {stars}/{CHAPTER_SIZE * 3}
+                    </Text>
+                  </View>
+                  <Text style={styles.cleared}>{open ? `${cleared}/${CHAPTER_SIZE} cleared` : 'Locked'}</Text>
+                </View>
+              </View>
+              {twist && (
+                <View style={[styles.twist, { borderColor: `${b.ui.accent}80` }]}>
+                  <Swords size={11} color={b.ui.soft} />
+                  <Text style={[styles.twistText, { color: b.ui.soft }]}>NEW TWISTS · {twist.toUpperCase()}</Text>
                 </View>
               )}
-            </TouchableOpacity>
+              <View style={styles.grid}>{ids.map((id) => tile(id, b.ui.accent, b.ui.soft))}</View>
+            </View>
           );
         })}
+
+        {/* past the campaign: the maze keeps going, cycling the biomes */}
+        <View style={[styles.chapter, { borderColor: 'rgba(120,200,255,0.35)', opacity: beyond.length ? 1 : 0.62 }]}>
+          <LinearGradient colors={['#0A1424', 'rgba(6,9,13,0.94)']} style={StyleSheet.absoluteFill} />
+          <View style={styles.chapterHead}>
+            <View style={[styles.emblem, { borderColor: UI.color.cyan, shadowColor: UI.color.cyan }]}>
+              <InfinityIcon size={20} color={UI.color.cyanSoft} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.chapterNum, { color: UI.color.cyan }]}>BEYOND · {CAMPAIGN_LEVELS + 1}+</Text>
+              <Text style={styles.chapterName}>THE ENDLESS DEEP</Text>
+              <Text style={styles.chapterTag}>Every biome again, darker each time</Text>
+            </View>
+          </View>
+          {beyond.length ? (
+            <View style={styles.grid}>{beyond.map((id) => tile(id, biomeForLevel(id).ui.accent, biomeForLevel(id).ui.soft))}</View>
+          ) : (
+            <Text style={styles.beyondLocked}>Clear Echo {CAMPAIGN_LEVELS} to descend further.</Text>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: PALETTE.voidBlack,
-    paddingTop: 50,
+  container: { flex: 1, backgroundColor: UI.color.ink, paddingTop: 34 },
+  scroll: { paddingHorizontal: 16, paddingBottom: 40, gap: 14 },
+  starChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, height: 30, borderRadius: 8, borderWidth: 1, borderColor: UI.color.stoneEdge, backgroundColor: 'rgba(10,14,19,0.85)' },
+  starChipText: { fontFamily: UI.font.techBold, fontSize: 14, color: UI.color.text },
+  chapter: { borderRadius: 14, borderWidth: 1, padding: 12, overflow: 'hidden' },
+  banner: { marginHorizontal: -12, marginTop: -12, marginBottom: 10, height: BANNER_H, overflow: 'hidden', borderTopLeftRadius: 13, borderTopRightRadius: 13 },
+  bannerNum: {
+    position: 'absolute',
+    left: 14,
+    top: 8,
+    fontFamily: UI.font.title,
+    fontSize: 30,
+    opacity: 0.9,
+    textShadowRadius: 12,
+    textShadowOffset: { width: 0, height: 0 },
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  backBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  backBtnText: {
-    color: '#CBD5E1',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: PALETTE.sonarCyan,
-    letterSpacing: 1.5,
-  },
-  shardCount: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: PALETTE.shardGold,
-    letterSpacing: 1,
-  },
-  scrollList: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    gap: 12,
-  },
-  card: {
-    borderRadius: 8,
-    padding: 16,
+  chapterHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  emblem: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1.5,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
-  numberRow: {
-    flexDirection: 'row',
+  chapterNum: { fontFamily: UI.font.label, fontSize: 10.5, letterSpacing: 2 },
+  chapterName: { fontFamily: UI.font.heading, fontSize: 16.5, color: '#EEF2F6', letterSpacing: 1, marginTop: 1 },
+  chapterTag: { fontFamily: UI.font.tech, fontSize: 12.5, color: '#8E9AAB', marginTop: 1 },
+  chapterStars: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  chapterStarsText: { fontFamily: UI.font.techBold, fontSize: 13, color: '#E8D8A8' },
+  cleared: { fontFamily: UI.font.tech, fontSize: 11, color: '#8592A2' },
+  twist: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6, borderWidth: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  twistText: { fontFamily: UI.font.techBold, fontSize: 10.5, letterSpacing: 1.2 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, marginTop: 12 },
+  tile: {
+    width: TILE,
+    height: TILE * 0.92,
+    borderRadius: 9,
+    borderWidth: 1.2,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
   },
-  levelNum: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  hunterTag: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: PALETTE.wraithRed,
-    backgroundColor: 'rgba(255, 59, 78, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 3,
-    letterSpacing: 0.8,
-  },
-  ghostTag: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: PALETTE.sonarCyan,
-    backgroundColor: 'rgba(77, 240, 255, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 3,
-    letterSpacing: 0.8,
-  },
-  starsRow: {
-    flexDirection: 'row',
-    gap: 2,
-  },
-  star: {
-    fontSize: 16,
-  },
-  lockTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#64748B',
-    letterSpacing: 1,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 1.2,
-    marginTop: 2,
-  },
-  cardSubtitle: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 2,
-    letterSpacing: 0.5,
-  },
-  hintText: {
-    fontSize: 10,
-    color: '#64748B',
-    fontStyle: 'italic',
-    marginTop: 6,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 10,
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  recordStat: {
-    fontSize: 10,
-    color: '#CBD5E1',
-    fontWeight: '600',
-    letterSpacing: 0.8,
-  },
+  tileNum: { fontFamily: UI.font.heading, fontSize: 17 },
+  tileStars: { flexDirection: 'row', gap: 1.5, marginTop: 3 },
+  beyondLocked: { fontFamily: UI.font.tech, fontSize: 13, color: '#8592A2', marginTop: 10 },
 });

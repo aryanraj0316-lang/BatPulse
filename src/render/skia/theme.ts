@@ -16,6 +16,11 @@ export const THEME = {
   floorStoneLight: '#1A222D',
   floorStoneHighlight: '#2A3442',
   floorPatchStrength: 0.22, // broad light/dark noise patches
+  floorPatchLight: '#3A4A5E',
+  floorWash: '#28466E', // cool ambient wash baked over the floor
+  floorWashAlpha: 0.1,
+  litter: '#2E3F1C',
+  litterDark: '#2B2416',
 
   // ── Walls (raised masonry) ─────────────────────────────────
   wallCap: '#4A5568',
@@ -25,6 +30,8 @@ export const THEME = {
   wallFacetDark: '#11161D',
   wallBevelLight: '#718096',
   wallBevelDark: '#141922',
+  wallCapHighlight: '#8C98A8',
+  wallWeatherLight: '#A0AEC0',
   wallShadow: 'rgba(0,0,0,0.8)',
   wallShadowBlur: 8,
   wallShadowOffset: { x: 5, y: 7 },
@@ -38,11 +45,19 @@ export const THEME = {
   mossDark: '#1F3A1E',
   ivy: ['#1E3A1A', '#2C5224', '#3F6E2E', '#5A8F3A'],
   berry: '#B3263A',
+  ivySheen: '#A8D36E',
+  vineStem: '#2A4A1B',
 
   // ── Border terrain ─────────────────────────────────────────
   rock: '#1B2027',
   rockLight: '#38414D',
   rockDark: '#0A0D11',
+  rockHighlight: '#5A6676',
+  borderLeaves: ['#14260F', '#1E3A17', '#2C5224', '#3F6E2E'],
+  borderLeafSheen: '#9CCB6A',
+  edgeFade: '#020305',
+  /** colour of the darkness that hides the maze */
+  darkness: '#010205',
 
   // ── Water ──────────────────────────────────────────────────
   waterTop: '#002B36',
@@ -61,6 +76,7 @@ export const THEME = {
   ambientTint: 'rgba(40, 70, 110, 0.10)', // cool wash over the whole world
   vignetteStrength: 0.62, // 0 = none
   vignetteColor: '#04070A',
+  lanternHot: '#FFE6A0',
 
   // ── Sonar ──────────────────────────────────────────────────
   sonarInner: '#00E5FF',

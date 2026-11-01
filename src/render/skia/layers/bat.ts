@@ -1,6 +1,8 @@
 import { Skia, type SkCanvas, type SkPicture } from '@shopify/react-native-skia';
 import { THEME, HQ } from '../theme';
-import { fill, stroke, shaded, svgPath, svgPathOnce, mix, linearNow, radialAt, radial, additive, rect, linear } from '../sk';
+import { fill, stroke, shaded, svgPath, svgPathOnce, mix, linearNow, radialAt, radial, additive, rect, linear, beginAlpha, glow } from '../sk';
+import { SkinDef, skinOf } from '../../../skins/skins';
+import { circleD } from '../../art/kit';
 
 /**
  * Animated bat rig (player + wraith).
@@ -47,6 +49,8 @@ export interface BatInput {
   /** 0..1 travel speed */
   speed?: number;
   react?: BatReactions;
+  /** player skin (ignored for wraiths) */
+  skin?: SkinDef;
 }
 
 // ─── per-bat spring + trail state ───────────────────────────
@@ -60,11 +64,26 @@ interface Rig {
   headV: number;
   trailL: P2[];
   trailR: P2[];
+  parts: Particle[];
+  emit: number;
+  arcAt: number;
+  arc: string;
+}
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  s: number;
+  k: number;
 }
 const rigs = new WeakMap<object, Rig>();
 const namedRigs = new Map<string, Rig>();
 function rigFor(key: object | string, t: number): Rig {
-  const make = (): Rig => ({ last: t, ear: 0, earV: 0, tail: 0, tailV: 0, head: 0, headV: 0, trailL: [], trailR: [] });
+  const make = (): Rig => ({ last: t, ear: 0, earV: 0, tail: 0, tailV: 0, head: 0, headV: 0, trailL: [], trailR: [], parts: [], emit: 0, arcAt: 0, arc: '' });
   if (typeof key === 'string') {
     let r = namedRigs.get(key);
     if (!r) namedRigs.set(key, (r = make()));
@@ -244,6 +263,11 @@ const FUR_HEAD_D = 'M-1.6,-8.8l0.2,1.2M0,-9.2v1.2M1.6,-8.8l-0.2,1.2M-2.4,-7l0.5,
 // ─── palettes ────────────────────────────────────────────────
 const PAL = {
   player: {
+    earOuter: '#4A3530',
+    muzzle: '#6A4E40',
+    legs: '#2A1C18',
+    furLine: '#2A1C18',
+    pupil: '#1A0F0A',
     dark: '#1E130E',
     mid: '#563A2F',
     lit: '#B07E66',
@@ -259,6 +283,11 @@ const PAL = {
     eyeGlow: '#FFB547',
   },
   wraith: {
+    earOuter: '#3D0810',
+    muzzle: '#2A0509',
+    legs: '#5A0D18',
+    furLine: '#1A0206',
+    pupil: '#7A0010',
     dark: '#140106',
     mid: '#3E0812',
     lit: '#A3203A',
@@ -275,9 +304,18 @@ const PAL = {
   },
 };
 
-const linearFixed = (variant: 'player' | 'wraith') => {
-  const pal = variant === 'wraith' ? PAL.wraith : PAL.player;
-  return linear(`tail|${variant}`, 0, 6, 0, 15, [
+type Pal = typeof PAL.player;
+const DEFAULT_SKIN = skinOf('dusk');
+/** Palette for one bat: wraiths are always crimson, the player wears its skin. */
+function palOf(variant: 'player' | 'wraith', skin: SkinDef): Pal {
+  return variant === 'wraith' ? PAL.wraith : { ...skin.pal };
+}
+/** Cache key for everything recorded per look. */
+const lookKey = (variant: 'player' | 'wraith', skin: SkinDef) => (variant === 'wraith' ? 'wraith' : `p:${skin.id}`);
+
+const linearFixed = (variant: 'player' | 'wraith', skin: SkinDef) => {
+  const pal = palOf(variant, skin);
+  return linear(`tail|${lookKey(variant, skin)}`, 0, 6, 0, 15, [
     [0, pal.mid, 1],
     [1, pal.lit, 0.9],
   ]);
@@ -288,6 +326,8 @@ const linearFixed = (variant: 'player' | 'wraith') => {
 // and replayed with a single drawPicture call. Body, head and ears are static pictures.
 interface WingPic {
   wings: SkPicture;
+  /** additive skin pattern drawn live with a pulsing alpha (null = none) */
+  glow: SkPicture | null;
   shadow: SkPicture;
   tipR: P2;
   tipL: P2;
@@ -304,19 +344,20 @@ function record(draw: (c: SkCanvas) => void): SkPicture {
   return rec.finishRecordingAsPicture();
 }
 
-function wingPicture(variant: 'player' | 'wraith', phase: number, amp: number, glide: number, bank: number): WingPic {
+function wingPicture(variant: 'player' | 'wraith', skin: SkinDef, phase: number, amp: number, glide: number, bank: number): WingPic {
   const PH = 32;
   const p01 = (((phase / (Math.PI * 2)) % 1) + 1) % 1;
   const pq = Math.round(p01 * PH) % PH;
   const aq = Math.round(amp * 10) / 10;
   const gq = Math.round(glide * 4) / 4;
   const bq = Math.round(bank * 4) / 4;
-  const key = `${variant}|${pq}|${aq}|${gq}|${bq}`;
+  const key = `${lookKey(variant, skin)}|${pq}|${aq}|${gq}|${bq}`;
   const hit = wingCache.get(key);
   if (hit) return hit;
 
   const isW = variant === 'wraith';
-  const pal = isW ? PAL.wraith : PAL.player;
+  const pal = palOf(variant, skin);
+  const fx = skin.fx;
   const B = beat((pq / PH) * Math.PI * 2, aq, gq, 0);
   const sag = 0.18 + 0.1 * B.up;
   const spanR = 1 - 0.3 * Math.max(0, bq) + 0.06 * Math.max(0, -bq);
@@ -376,10 +417,23 @@ function wingPicture(variant: 'player' | 'wraith', phase: number, amp: number, g
     drawWing(wR, gR, thR, 1);
     drawWing(wL, gL, thL, -1);
     if (!isW && outline && B.theta < 0) {
-      c.drawPath(outline, additive(fill(THEME.batAura, Math.min(0.16, -Math.sin(B.theta * DEG) * 0.2))));
+      c.drawPath(outline, additive(fill(fx.aura, Math.min(0.16, -Math.sin(B.theta * DEG) * 0.2))));
     }
-    if (outline) c.drawPath(outline, stroke(isW ? THEME.enemyRim : '#CFE9FF', isW ? 0.9 : 0.45, isW ? 0.85 : 0.28, true));
+    if (!isW && fx.pattern !== 'none') {
+      wingPattern(c, skin, wR, gR, 1, 0.38, false);
+      wingPattern(c, skin, wL, gL, -1, 0.38, false);
+    }
+    const plain = skin.id === 'dusk';
+    if (outline) c.drawPath(outline, stroke(isW ? THEME.enemyRim : plain ? '#CFE9FF' : pal.edge, isW ? 0.9 : 0.45, isW ? 0.85 : plain ? 0.28 : 0.5, true));
   });
+  const glowPic =
+    !isW && fx.pattern !== 'none'
+      ? record((c) => {
+          if (outline && (fx.pattern === 'umbra' || fx.pattern === 'ember' || fx.pattern === 'royal')) c.drawPath(outline, additive(stroke(fx.glow, 1.6, 0.35, true)));
+          wingPattern(c, skin, wR, gR, 1, 1, true);
+          wingPattern(c, skin, wL, gL, -1, 1, true);
+        })
+      : null;
 
   // soft-ish floor shadow without a blur: solid core + faint wider edge
   const shadowPath = svgPathOnce(wR.outline + wL.outline + BODY_D + HEAD_D);
@@ -389,7 +443,7 @@ function wingPicture(variant: 'player' | 'wraith', phase: number, amp: number, g
     c.drawPath(shadowPath, fill('#000000', 0.34));
   });
 
-  const entry: WingPic = { wings, shadow, tipR: gR.D[1], tipL: [-gL.D[1][0], gL.D[1][1]], lift: B.lift };
+  const entry: WingPic = { wings, glow: glowPic, shadow, tipR: gR.D[1], tipL: [-gL.D[1][0], gL.D[1][1]], lift: B.lift };
   if (wingCache.size > 500) {
     const first = wingCache.keys().next().value;
     if (first !== undefined) wingCache.delete(first);
@@ -407,15 +461,16 @@ function staticPic(key: string, draw: (c: SkCanvas) => void): SkPicture {
   return p;
 }
 
-function bodyPicture(variant: 'player' | 'wraith') {
+function bodyPicture(variant: 'player' | 'wraith', skin: SkinDef) {
   const isW = variant === 'wraith';
-  const pal = isW ? PAL.wraith : PAL.player;
-  return staticPic(`body|${variant}`, (c) => {
+  const pal = palOf(variant, skin);
+  const lk = lookKey(variant, skin);
+  return staticPic(`body|${lk}`, (c) => {
     const body = svgPath(BODY_D)!;
-    c.drawPath(body, shaded(radialAt(isW ? 'wBody3' : 'pBody3', -1, 0.2, 8, [[0, pal.furHi, 1], [0.55, pal.fur, 1], [1, pal.body, 1]])));
+    c.drawPath(body, shaded(radialAt(`body3|${lk}`, -1, 0.2, 8, [[0, pal.furHi, 1], [0.55, pal.fur, 1], [1, pal.body, 1]])));
     c.drawLine(0, -2.4, 0, 8, stroke('#000000', 1.6, 0.2, true));
     const fur = svgPath(FUR_D)!;
-    c.drawPath(fur, stroke(isW ? '#1A0206' : '#2A1C18', 0.5, 0.55, true));
+    c.drawPath(fur, stroke(pal.furLine, 0.5, 0.55, true));
     c.save();
     c.translate(-0.25, -0.25);
     c.drawPath(fur, stroke(pal.furHi, 0.32, 0.55, true));
@@ -426,29 +481,38 @@ function bodyPicture(variant: 'player' | 'wraith') {
   });
 }
 
-function headPicture(variant: 'player' | 'wraith') {
+function headPicture(variant: 'player' | 'wraith', skin: SkinDef) {
   const isW = variant === 'wraith';
-  const pal = isW ? PAL.wraith : PAL.player;
-  return staticPic(`head|${variant}`, (c) => {
+  const pal = palOf(variant, skin);
+  const lk = lookKey(variant, skin);
+  return staticPic(`head|${lk}`, (c) => {
     const head = svgPath(HEAD_D)!;
-    c.drawPath(head, shaded(radialAt(isW ? 'wHead' : 'pHead', -0.8, -7.8, 5, [[0, pal.furHi, 1], [1, pal.head, 1]])));
-    c.drawPath(svgPath(FUR_HEAD_D)!, stroke(isW ? '#1A0206' : '#2A1C18', 0.35, 0.5, true));
-    c.drawPath(head, stroke(isW ? THEME.enemyRim : '#22160F', 0.4, isW ? 0.8 : 0.55));
-    c.drawPath(svgPath(MUZZLE_D)!, fill(isW ? '#2A0509' : '#6A4E40'));
+    if (!isW) drawCrest(c, skin, true);
+    c.drawPath(head, shaded(radialAt(`head|${lk}`, -0.8, -7.8, 5, [[0, pal.furHi, 1], [1, pal.head, 1]])));
+    c.drawPath(svgPath(FUR_HEAD_D)!, stroke(pal.furLine, 0.35, 0.5, true));
+    c.drawPath(head, stroke(isW ? THEME.enemyRim : skin.id === 'dusk' ? '#22160F' : pal.furLine, 0.4, isW ? 0.8 : 0.55));
+    c.drawPath(svgPath(MUZZLE_D)!, fill(pal.muzzle));
     c.drawCircle(-0.5, -10.4, 0.28, fill('#140C0A'));
     c.drawCircle(0.5, -10.4, 0.28, fill('#140C0A'));
+    if (!isW) drawCrest(c, skin, false);
   });
 }
 
-function earPicture(variant: 'player' | 'wraith') {
+function earPicture(variant: 'player' | 'wraith', skin: SkinDef) {
   const isW = variant === 'wraith';
-  const pal = isW ? PAL.wraith : PAL.player;
-  return staticPic(`ear|${variant}`, (c) => {
+  const pal = palOf(variant, skin);
+  return staticPic(`ear|${lookKey(variant, skin)}`, (c) => {
     const ear = svgPath(EAR_D)!;
-    c.drawPath(ear, fill(isW ? '#3D0810' : '#4A3530'));
+    c.drawPath(ear, fill(pal.earOuter));
     c.drawPath(svgPath(EAR_IN_D)!, fill(pal.earIn, isW ? 0.6 : 0.85));
-    c.drawPath(svgPath(EAR_RIDGES_D)!, stroke('#2A1C18', 0.3, 0.6, true));
-    c.drawPath(ear, stroke(isW ? THEME.enemyRim : '#6A4E40', 0.4, 0.9));
+    c.drawPath(svgPath(EAR_RIDGES_D)!, stroke(pal.furLine, 0.3, 0.6, true));
+    c.drawPath(ear, stroke(isW ? THEME.enemyRim : pal.muzzle, 0.4, 0.9));
+    if (!isW && skin.fx.crest === 'icicles') {
+      // frosted ear tips
+      const tip = svgPath('M2.4,-4.6L3.1,-5.9L3.8,-4.8Z');
+      if (tip) c.drawPath(tip, fill('#FFFFFF', 0.95));
+    }
+    if (!isW && skin.fx.pattern === 'ember') c.drawPath(ear, additive(stroke(skin.fx.glow, 0.5, 0.6)));
   });
 }
 
@@ -456,7 +520,9 @@ function earPicture(variant: 'player' | 'wraith') {
 export function drawBatRig(c: SkCanvas, input: BatInput) {
   const { x, y, deg, k, phase, t, variant } = input;
   const isW = variant === 'wraith';
-  const pal = isW ? PAL.wraith : PAL.player;
+  const skin = isW ? DEFAULT_SKIN : input.skin ?? DEFAULT_SKIN;
+  const pal = palOf(variant, skin);
+  const fancy = !isW && skin.id !== 'dusk';
   const R = input.react ?? { pingK: 0, bumpK: 0, pickupK: 0, fear: 0 };
   const bank = Math.max(-1, Math.min(1, input.bank ?? 0));
   const speed = input.speed ?? 0;
@@ -472,7 +538,7 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
   [rig.head, rig.headV] = spring(rig.head, rig.headV, bank * 14 + idleLook, 70, 12, dt);
 
   const amp = Math.min(1.3, (input.amp ?? 1) * (1 + 0.45 * R.pingK));
-  const W = wingPicture(variant, phase, amp, input.glide ?? 0, bank);
+  const W = wingPicture(variant, skin, phase, amp, input.glide ?? 0, bank);
   const alt = W.lift;
 
   const squashX = 1 + 0.16 * R.bumpK;
@@ -492,7 +558,7 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
   pushTrail(rig.trailR, toWorld(W.tipR));
   pushTrail(rig.trailL, toWorld(W.tipL));
   if (HQ && trailing) {
-    const col = isW ? '#FF4D6A' : '#9AF6FF';
+    const col = isW ? '#FF4D6A' : skin.fx.trail;
     for (const tr of [rig.trailL, rig.trailR]) {
       for (let i = 1; i < tr.length; i++) {
         if (Math.hypot(tr[i][0] - tr[i - 1][0], tr[i][1] - tr[i - 1][1]) > 9 * k) continue;
@@ -509,13 +575,21 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
   c.drawPicture(W.shadow);
   c.restore();
 
+  // ── skin halo behind the bat ──
+  if (fancy && skin.fx.halo !== 'none') drawHalo(c, skin, x, y - 0.9 * k * alt, k, t);
+
   c.save();
   c.translate(x + shake, y - 0.9 * k * alt);
   c.rotate(deg, 0, 0);
   c.scale(k, k);
 
-  // ── wings (one picture) ──
+  // ── wings (one picture) + the skin's glowing pattern, pulsing live ──
   c.drawPicture(W.wings);
+  if (W.glow) {
+    beginAlpha(c, patternPulse(skin, t));
+    c.drawPicture(W.glow);
+    c.restore();
+  }
 
   // ── body: tail + legs live (they lag on a spring), torso is a picture ──
   c.save();
@@ -523,20 +597,20 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
   const tx = Math.round(rig.tail * 5) / 5; // quantised → cached paths
   const tail = svgPath(`M-2.6,6Q-2.6,10.4 -2.2,11.2Q${n1(tx)},14.2 ${n1(tx)},14.9Q${n1(tx)},14.2 2.2,11.2Q2.6,10.4 2.6,6Z`);
   if (tail) {
-    c.drawPath(tail, shaded(linearFixed(variant)));
+    c.drawPath(tail, shaded(linearFixed(variant, skin)));
     c.drawPath(tail, stroke(pal.bone, 0.35, 0.6));
   }
   c.drawLine(0, 7, tx, 14.6, stroke(pal.bone, 0.45, 0.8, true));
   const legs = svgPath(`M-2.2,6.2L-3,8.4L${n1(-2.6 + tx * 0.3)},11l-0.7,0.8M${n1(-2.6 + tx * 0.3)},11l0.3,1M2.2,6.2L3,8.4L${n1(2.6 + tx * 0.3)},11l0.7,0.8M${n1(2.6 + tx * 0.3)},11l-0.3,1`);
-  if (legs) c.drawPath(legs, stroke(isW ? '#5A0D18' : '#2A1C18', 0.7, 1, true));
-  c.drawPicture(bodyPicture(variant));
+  if (legs) c.drawPath(legs, stroke(pal.legs, 0.7, 1, true));
+  c.drawPicture(bodyPicture(variant, skin));
   c.restore();
 
   // ── head (jolts forward on a ping, turns on a spring) ──
   c.save();
   c.translate(0, -1.1 * R.pingK);
   c.rotate(rig.head, 0, -3.2);
-  const ear = earPicture(variant);
+  const ear = earPicture(variant, skin);
   for (const side of [1, -1] as const) {
     c.save();
     c.translate(1.5 * side, -8.6);
@@ -545,7 +619,7 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
     c.drawPicture(ear);
     c.restore();
   }
-  c.drawPicture(headPicture(variant));
+  c.drawPicture(headPicture(variant, skin));
   if (R.pingK > 0.05) {
     c.drawOval(rect(-1.3 * R.pingK, -11.6, 2.6 * R.pingK, 1.8 * R.pingK), fill('#0A0406'));
     c.drawCircle(-0.6 * R.pingK, -11.3, 0.22, fill('#FFFFFF', R.pingK));
@@ -564,7 +638,7 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
       c.drawLine(ex - eyeR, ey, ex + eyeR, ey, stroke('#1A0F0A', 0.5, 1, true));
     } else {
       c.drawCircle(ex, ey, eyeR, fill(R.pickupK > 0.3 ? '#FFE08A' : pal.eye));
-      c.drawCircle(ex + 0.1, ey - 0.1 * squint, eyeR * 0.5, fill(isW ? '#7A0010' : '#1A0F0A'));
+      c.drawCircle(ex + 0.1, ey - 0.1 * squint, eyeR * 0.5, fill(pal.pupil));
       c.drawCircle(ex - 0.35, ey - 0.4 * squint, eyeR * 0.22, fill('#FFFFFF', 0.95));
     }
   }
@@ -572,11 +646,19 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
     for (let i = 0; i < 3; i++) {
       const r = Math.round((2 + i * 2.2 + (1 - R.pingK) * 7) * 2) / 2;
       const arc = svgPath(`M${n1(-r * 0.7)},${n1(-11.8 - r * 0.7)}Q0,${n1(-11.8 - r * 1.15)} ${n1(r * 0.7)},${n1(-11.8 - r * 0.7)}`);
-      if (arc) c.drawPath(arc, additive(stroke(THEME.sonarInner, 0.9, R.pingK * (1 - i * 0.25), true)));
+      if (arc) c.drawPath(arc, additive(stroke(isW ? THEME.sonarInner : skin.fx.glow, 0.9, R.pingK * (1 - i * 0.25), true)));
     }
   }
   c.restore(); // head
   c.restore(); // bat
+
+  // ── skin particles + crackling arcs (world space) ──
+  if (fancy) {
+    const tipR = toWorld(W.tipR);
+    const tipL = toWorld(W.tipL);
+    skinParticles(c, rig, skin, [tipR, tipL, [x, y]], k, dt, speed, t);
+    if (skin.fx.arcs) drawArcs(c, rig, skin, tipL, tipR, [x, y - 0.9 * k * alt], k, t);
+  }
 
   // ── pickup sparkles orbiting the bat ──
   if (R.pickupK > 0.02) {
@@ -595,4 +677,386 @@ export function drawBatRig(c: SkCanvas, input: BatInput) {
     c.drawCircle(0, 0, 1, additive(shaded(radial('pickupFlash', [[0, '#FFD54F', 0.4], [1, '#FFD54F', 0]]), R.pickupK)));
     c.restore();
   }
+}
+
+
+// ═════════════════════════════════════════════════════════════
+// Skins: wing patterns, crests, halos, particles, arcs
+// ═════════════════════════════════════════════════════════════
+
+/** Live brightness of a skin's glowing wing pattern. */
+function patternPulse(skin: SkinDef, t: number) {
+  switch (skin.fx.pattern) {
+    case 'ember':
+      return 0.55 + 0.45 * Math.sin(t * 0.006) * Math.sin(t * 0.0023 + 1);
+    case 'storm': {
+      const spike = Math.sin(t * 0.05) * Math.sin(t * 0.031) > 0.55 ? 1 : 0.3 + 0.15 * Math.sin(t * 0.02);
+      return spike;
+    }
+    case 'frost':
+      return 0.6 + 0.3 * Math.sin(t * 0.002);
+    case 'lunar':
+      return 0.5 + 0.4 * Math.sin(t * 0.0015);
+    case 'jade':
+      return 0.45 + 0.45 * Math.sin(t * 0.0035);
+    case 'umbra':
+      return 0.5 + 0.35 * Math.sin(t * 0.0025);
+    case 'royal':
+      return 0.55 + 0.35 * Math.sin(t * 0.003);
+    default:
+      return 0;
+  }
+}
+
+/** Paints a skin's pattern onto one wing (inside the cached wing picture). */
+function wingPattern(c: SkCanvas, skin: SkinDef, wp: ReturnType<typeof wingPaths>, g: WingGeo, side: 1 | -1, a: number, bright: boolean) {
+  const fx = skin.fx;
+  const M = (p: P2): string => `${n1(p[0] * side)},${n1(p[1])}`;
+  const line = (d: string, color: string, w: number, alpha: number) => {
+    const p = svgPathOnce(d);
+    if (!p) return;
+    const paint = stroke(color, w, alpha * a, true);
+    c.drawPath(p, bright ? additive(paint) : paint);
+  };
+  const dots = (d: string, color: string, alpha: number) => {
+    const p = svgPathOnce(d);
+    if (!p) return;
+    const paint = fill(color, alpha * a);
+    c.drawPath(p, bright ? additive(paint) : paint);
+  };
+  switch (fx.pattern) {
+    case 'ember':
+      line(wp.veins + wp.fingers, fx.glow, bright ? 0.9 : 0.6, 0.95);
+      line(wp.arm, fx.accent, bright ? 0.7 : 0.4, 0.8);
+      break;
+    case 'frost': {
+      let d = '';
+      const pts = [...wp.knuckles, ...wp.edgeMids.slice(0, 3).map((m) => lerp2(m, g.W, 0.45))];
+      for (const q of pts) {
+        for (let i = 0; i < 3; i++) {
+          const ang = (i * Math.PI) / 3 + 0.3;
+          const dx = Math.cos(ang) * 1.1;
+          const dy = Math.sin(ang) * 1.1;
+          d += `M${M([q[0] - dx, q[1] - dy])}L${M([q[0] + dx, q[1] + dy])}`;
+        }
+      }
+      line(d, '#FFFFFF', 0.32, 0.95);
+      line(wp.veins, fx.glow, 0.35, 0.8);
+      break;
+    }
+    case 'lunar': {
+      let d = '';
+      const spots: [P2, number][] = [
+        [lerp2(g.W, g.D[1], 0.6), 1.5],
+        [lerp2(g.W, g.D[2], 0.55), 1.2],
+        [lerp2(g.E, g.D[3], 0.5), 1.3],
+      ];
+      for (const [q, r] of spots) {
+        const cx = q[0] * side;
+        const cy = q[1];
+        d += `M${n1(cx - r)},${n1(cy)}A${n1(r)},${n1(r)} 0 1,0 ${n1(cx + r)},${n1(cy)}A${n1(r * 0.78)},${n1(r * 0.78)} 0 1,1 ${n1(cx - r)},${n1(cy)}Z`;
+      }
+      dots(d, fx.glow, 0.9);
+      line(wp.veins, fx.accent, 0.3, 0.6);
+      break;
+    }
+    case 'jade': {
+      let d = '';
+      for (let i = 0; i < 3; i++) {
+        const cx = (g.W[0] + g.D[i][0] + g.D[i + 1][0] + wp.edgeMids[i][0]) / 4;
+        const cy = (g.W[1] + g.D[i][1] + g.D[i + 1][1] + wp.edgeMids[i][1]) / 4;
+        d += circleD(cx * side, cy, 1.25 - i * 0.12);
+        const q = lerp2([cx, cy], g.W, 0.45);
+        d += circleD(q[0] * side, q[1], 0.6);
+      }
+      const am = lerp2(g.E, g.W, 0.5);
+      d += circleD(am[0] * side, am[1] + 1.4, 0.8);
+      dots(d, fx.accent, 0.95);
+      line(wp.fingers, fx.glow, 0.45, 0.8);
+      break;
+    }
+    case 'storm': {
+      let d = '';
+      g.D.forEach((tip, i) => {
+        const dx = tip[0] - g.W[0];
+        const dy = tip[1] - g.W[1];
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        d += `M${M(g.W)}`;
+        for (let k = 1; k <= 4; k++) {
+          const u = k / 5;
+          const off = (k % 2 ? 1 : -1) * (0.55 + ((i + k) % 3) * 0.2);
+          d += `L${M([g.W[0] + dx * u + nx * off, g.W[1] + dy * u + ny * off])}`;
+        }
+        d += `L${M(lerp2(g.W, tip, 0.92))}`;
+      });
+      line(d, fx.glow, bright ? 0.75 : 0.5, 0.95);
+      if (bright) line(d, '#FFFFFF', 0.25, 0.9);
+      break;
+    }
+    case 'umbra':
+      line(wp.veins, fx.glow, 0.4, 0.6);
+      break;
+    case 'royal': {
+      line(wp.arm + wp.fingers, fx.glow, bright ? 0.7 : 0.55, 0.9);
+      if (bright) line(wp.arm + wp.fingers, '#FFFFFF', 0.2, 0.8);
+      let d = '';
+      for (const q of wp.knuckles) {
+        const cx = q[0] * side;
+        const cy = q[1];
+        d += `M${n1(cx)},${n1(cy - 0.9)}L${n1(cx + 0.6)},${n1(cy)}L${n1(cx)},${n1(cy + 0.9)}L${n1(cx - 0.6)},${n1(cy)}Z`;
+      }
+      dots(d, fx.accent, 0.95);
+      let curls = '';
+      for (const m of wp.edgeMids) {
+        const q = lerp2(m, g.W, 0.18);
+        curls += circleD(q[0] * side, q[1], 0.45);
+      }
+      dots(curls, fx.glow, 0.9);
+      break;
+    }
+  }
+}
+
+/** Head decorations (horns, crown …). `behind` = drawn before the head. */
+function drawCrest(c: SkCanvas, skin: SkinDef, behind: boolean) {
+  const fx = skin.fx;
+  const both = (d: string, paint: () => ReturnType<typeof fill>, sw?: () => ReturnType<typeof stroke>) => {
+    const p = svgPath(d);
+    if (!p) return;
+    for (const side of [1, -1]) {
+      c.save();
+      c.scale(side, 1);
+      c.drawPath(p, paint());
+      if (sw) c.drawPath(p, sw());
+      c.restore();
+    }
+  };
+  switch (fx.crest) {
+    case 'horns':
+      if (behind) both('M2,-5.8Q4.8,-5.6 5.4,-2.4Q4,-4 2.4,-4.4Z', () => fill('#140A08'), () => additive(stroke(fx.glow, 0.45, 0.85, true)));
+      break;
+    case 'icicles':
+      if (!behind) {
+        const p = svgPath('M-1.5,-5.2L-1,-2.4L-0.5,-5.2ZM-0.5,-5.4L0,-1.8L0.5,-5.4ZM0.5,-5.2L1,-2.4L1.5,-5.2Z');
+        if (p) {
+          c.drawPath(p, fill('#F2FAFF', 0.95));
+          c.drawPath(p, stroke('#7FC8F0', 0.25, 0.9));
+        }
+      }
+      break;
+    case 'crescent':
+      if (!behind) {
+        const p = svgPath('M-1.3,-7.6A1.3,1.3 0 1,0 1.3,-7.6A1,1 0 1,1 -1.3,-7.6Z');
+        if (p) c.drawPath(p, additive(fill(fx.glow, 0.95)));
+      }
+      break;
+    case 'frills':
+      if (behind) both('M3,-8L5.8,-9.2L4.8,-7.2L6,-6.2L3.4,-5.6Z', () => fill('#1E5A3A'), () => stroke(fx.accent, 0.35, 0.9, true));
+      break;
+    case 'antennae':
+      if (!behind) {
+        const p = svgPath('M-0.9,-9.8Q-1.6,-12.2 -2.8,-13.4M0.9,-9.8Q1.6,-12.2 2.8,-13.4');
+        if (p) c.drawPath(p, stroke('#9AD8FF', 0.35, 0.9, true));
+        c.drawCircle(-2.8, -13.4, 0.55, additive(fill('#FFFFFF', 0.95)));
+        c.drawCircle(2.8, -13.4, 0.55, additive(fill('#FFFFFF', 0.95)));
+      }
+      break;
+    case 'shadowhorns':
+      if (behind) both('M1.8,-6C4.6,-6.8 6.6,-3.6 6.2,0.6C5.4,-2.6 3.9,-4.4 1.9,-4.8Z', () => fill('#05030A'), () => stroke(fx.glow, 0.4, 0.95, true));
+      break;
+    case 'crown':
+      if (!behind) {
+        let d = '';
+        for (let i = 0; i < 5; i++) {
+          const a = -Math.PI / 2 + ((i - 2) / 5) * Math.PI * 0.9;
+          const bx = Math.cos(a) * 2.4;
+          const by = -6.9 + Math.sin(a) * 2.4;
+          const tx = Math.cos(a) * 4;
+          const ty = -6.9 + Math.sin(a) * 4;
+          const px = -Math.sin(a) * 0.7;
+          const py = Math.cos(a) * 0.7;
+          d += `M${n1(bx - px)},${n1(by - py)}L${n1(tx)},${n1(ty)}L${n1(bx + px)},${n1(by + py)}Z`;
+        }
+        const pts = svgPath(d);
+        if (pts) {
+          c.drawPath(pts, shaded(linear('crownGold', 0, -11, 0, -5, [[0, '#FFF6C8', 1], [0.5, '#FFD24A', 1], [1, '#A86A10', 1]])));
+          c.drawPath(pts, stroke('#5A3A00', 0.25, 0.9));
+        }
+        const band = svgPath('M-2.6,-6.9A2.6,2.6 0 0,1 2.6,-6.9');
+        if (band) c.drawPath(band, stroke('#FFD24A', 1, 1, true));
+        c.drawCircle(0, -9.4, 0.5, fill('#FF3A5A'));
+        c.drawCircle(-1.6, -8.9, 0.38, fill('#4AA8FF'));
+        c.drawCircle(1.6, -8.9, 0.38, fill('#4AFFB0'));
+      }
+      break;
+  }
+}
+
+/** Moon ring / sun rays behind the bat. */
+function drawHalo(c: SkCanvas, skin: SkinDef, x: number, y: number, k: number, t: number) {
+  const fx = skin.fx;
+  c.save();
+  c.translate(x, y);
+  if (fx.halo === 'moon') {
+    glow(c, radial(`halo${fx.glow}`, [[0, fx.glow, 0.32], [0.6, fx.glow, 0.08], [1, fx.glow, 0]]), 0, 0, 24 * k, 0.8 + 0.2 * Math.sin(t * 0.002));
+    c.drawCircle(0, 0, 17 * k, additive(stroke(fx.glow, 0.7 * k, 0.45, true, [3 * k, 4 * k], -t * 0.01)));
+    c.drawCircle(0, 0, 19.5 * k, additive(stroke(fx.accent, 0.4 * k, 0.25)));
+  } else if (fx.halo === 'sun') {
+    glow(c, radial(`halo${fx.glow}`, [[0, fx.glow, 0.4], [0.5, fx.glow, 0.12], [1, fx.glow, 0]]), 0, 0, 28 * k, 0.85 + 0.15 * Math.sin(t * 0.003));
+    c.save();
+    c.rotate(t * 0.012, 0, 0);
+    let d = '';
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const L = (i % 2 ? 22 : 27) * k;
+      const r0 = 14 * k;
+      const wd = 0.11;
+      d += `M${n1(Math.cos(a - wd) * r0)},${n1(Math.sin(a - wd) * r0)}L${n1(Math.cos(a) * L)},${n1(Math.sin(a) * L)}L${n1(Math.cos(a + wd) * r0)},${n1(Math.sin(a + wd) * r0)}Z`;
+    }
+    const rays = svgPathOnce(d);
+    if (rays) c.drawPath(rays, additive(fill(fx.glow, 0.28 + 0.1 * Math.sin(t * 0.004))));
+    c.restore();
+    c.drawCircle(0, 0, 14 * k, additive(stroke('#FFF2C4', 0.5 * k, 0.4)));
+  }
+  c.restore();
+}
+
+const PCFG: Record<string, { rate: number; life: number; vy: number; spread: number; s0: number; s1: number }> = {
+  embers: { rate: 14, life: 0.9, vy: -24, spread: 10, s0: 0.5, s1: 1.2 },
+  snow: { rate: 10, life: 1.4, vy: 9, spread: 7, s0: 0.5, s1: 1.2 },
+  moon: { rate: 6, life: 1.7, vy: -5, spread: 5, s0: 0.4, s1: 0.9 },
+  spores: { rate: 8, life: 1.9, vy: -7, spread: 9, s0: 0.6, s1: 1.3 },
+  sparks: { rate: 11, life: 0.32, vy: 0, spread: 70, s0: 0.4, s1: 0.8 },
+  smoke: { rate: 16, life: 0.9, vy: 0, spread: 6, s0: 1.2, s1: 2.4 },
+  gold: { rate: 10, life: 1.2, vy: -6, spread: 8, s0: 0.8, s1: 1.6 },
+};
+
+/** Emits, moves and draws a skin's particles (state lives on the bat's rig). */
+function skinParticles(c: SkCanvas, rig: Rig, skin: SkinDef, src: P2[], k: number, dt: number, speed: number, t: number) {
+  const kind = skin.fx.particles;
+  const cfg = PCFG[kind];
+  if (!cfg) return;
+  rig.emit = Math.min(3, rig.emit + dt * cfg.rate * (0.55 + speed * 1.5));
+  while (rig.emit >= 1 && rig.parts.length < 46) {
+    rig.emit -= 1;
+    const p = src[Math.floor(Math.random() * src.length)];
+    const a = Math.random() * Math.PI * 2;
+    const v = cfg.spread * (0.3 + Math.random() * 0.7);
+    rig.parts.push({
+      x: p[0] + (Math.random() - 0.5) * 3 * k,
+      y: p[1] + (Math.random() - 0.5) * 3 * k,
+      vx: Math.cos(a) * v * k,
+      vy: (Math.sin(a) * v + cfg.vy) * k,
+      life: cfg.life * (0.7 + Math.random() * 0.3),
+      max: cfg.life,
+      s: (cfg.s0 + Math.random() * (cfg.s1 - cfg.s0)) * k,
+      k: Math.random(),
+    });
+  }
+  const live: Particle[] = [];
+  for (const q of rig.parts) {
+    q.life -= dt;
+    if (q.life <= 0) continue;
+    if (kind === 'sparks') {
+      q.vx *= 1 - dt * 4;
+      q.vy *= 1 - dt * 4;
+    }
+    if (kind === 'snow' || kind === 'spores' || kind === 'embers') q.vx += Math.sin(t * 0.004 + q.k * 9) * 12 * k * dt;
+    q.x += q.vx * dt;
+    q.y += q.vy * dt;
+    live.push(q);
+  }
+  rig.parts = live;
+  if (!live.length) return;
+  const fx = skin.fx;
+  let a = '';
+  let b = '';
+  for (const q of live) {
+    const u = q.life / q.max; // 1 → 0
+    switch (kind) {
+      case 'embers':
+        a += circleD(q.x, q.y, q.s * 3 * u);
+        b += circleD(q.x, q.y, q.s * (0.4 + 0.6 * u));
+        break;
+      case 'snow':
+      case 'moon':
+        b += circleD(q.x, q.y, q.s * (0.5 + 0.5 * u));
+        if (q.k > 0.7) a += circleD(q.x, q.y, q.s * 2.6);
+        break;
+      case 'spores':
+        a += circleD(q.x, q.y, q.s * 2.4 * (0.6 + 0.4 * Math.sin(t * 0.006 + q.k * 7)));
+        b += circleD(q.x, q.y, q.s * 0.7);
+        break;
+      case 'sparks':
+        a += `M${n1(q.x)},${n1(q.y)}L${n1(q.x - q.vx * 0.035)},${n1(q.y - q.vy * 0.035)}`;
+        break;
+      case 'smoke':
+        a += circleD(q.x, q.y, q.s * (1 + (1 - u) * 2.2));
+        break;
+      case 'gold': {
+        const s = q.s * (0.5 + 0.5 * Math.abs(Math.sin(t * 0.01 + q.k * 9))) * (0.4 + 0.6 * u);
+        b += `M${n1(q.x)},${n1(q.y - s * 2)}L${n1(q.x + s * 0.45)},${n1(q.y - s * 0.45)}L${n1(q.x + s * 2)},${n1(q.y)}L${n1(q.x + s * 0.45)},${n1(q.y + s * 0.45)}L${n1(q.x)},${n1(q.y + s * 2)}L${n1(q.x - s * 0.45)},${n1(q.y + s * 0.45)}L${n1(q.x - s * 2)},${n1(q.y)}L${n1(q.x - s * 0.45)},${n1(q.y - s * 0.45)}Z`;
+        break;
+      }
+    }
+  }
+  const pa = svgPathOnce(a);
+  const pb = svgPathOnce(b);
+  switch (kind) {
+    case 'embers':
+      if (pa) c.drawPath(pa, additive(fill(fx.glow, 0.18)));
+      if (pb) c.drawPath(pb, additive(fill(fx.accent, 0.95)));
+      break;
+    case 'snow':
+      if (pa) c.drawPath(pa, additive(fill(fx.glow, 0.12)));
+      if (pb) c.drawPath(pb, fill('#FFFFFF', 0.85));
+      break;
+    case 'moon':
+      if (pa) c.drawPath(pa, additive(fill(fx.glow, 0.15)));
+      if (pb) c.drawPath(pb, additive(fill('#FFFFFF', 0.8)));
+      break;
+    case 'spores':
+      if (pa) c.drawPath(pa, additive(fill(fx.glow, 0.22)));
+      if (pb) c.drawPath(pb, additive(fill(fx.accent, 0.9)));
+      break;
+    case 'sparks':
+      if (pa) {
+        c.drawPath(pa, additive(stroke(fx.glow, 1.2 * k, 0.6, true)));
+        c.drawPath(pa, additive(stroke('#FFFFFF', 0.45 * k, 0.95, true)));
+      }
+      break;
+    case 'smoke':
+      if (pa) {
+        c.drawPath(pa, fill('#0A0614', 0.32));
+        c.drawPath(pa, additive(stroke(fx.glow, 0.35 * k, 0.22)));
+      }
+      break;
+    case 'gold':
+      if (pb) c.drawPath(pb, additive(fill(fx.glow, 0.9)));
+      break;
+  }
+}
+
+/** Crackling lightning between the wingtips and the body (regenerated ~14×/s). */
+function drawArcs(c: SkCanvas, rig: Rig, skin: SkinDef, a: P2, b: P2, mid: P2, k: number, t: number) {
+  if (t - rig.arcAt > 70 || !rig.arc) {
+    rig.arcAt = t;
+    const jag = (p: P2, q: P2) => {
+      let d = `M${n1(p[0])},${n1(p[1])}`;
+      const n = 5;
+      for (let i = 1; i < n; i++) {
+        const u = i / n;
+        d += `L${n1(p[0] + (q[0] - p[0]) * u + (Math.random() - 0.5) * 5 * k)},${n1(p[1] + (q[1] - p[1]) * u + (Math.random() - 0.5) * 5 * k)}`;
+      }
+      return d + `L${n1(q[0])},${n1(q[1])}`;
+    };
+    rig.arc = (Math.random() < 0.6 ? jag(a, mid) : '') + (Math.random() < 0.6 ? jag(mid, b) : '') + (Math.random() < 0.25 ? jag(a, b) : '');
+  }
+  const p = svgPathOnce(rig.arc);
+  if (!p) return;
+  const flick = 0.4 + 0.6 * Math.random();
+  c.drawPath(p, additive(stroke(skin.fx.glow, 1.6 * k, 0.3 * flick, true)));
+  c.drawPath(p, additive(stroke('#FFFFFF', 0.5 * k, 0.85 * flick, true)));
 }

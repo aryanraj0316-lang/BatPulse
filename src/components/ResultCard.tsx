@@ -1,7 +1,14 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import { PALETTE } from '../constants/palette';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, LayoutChangeEvent, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import { Timer, Radio, Star, ArrowRight, RotateCw, Menu } from 'lucide-react-native';
 import { ScoreBreakdown } from '../engine/ScoringSystem';
+import { UI } from '../ui/theme';
+import { LiveCanvas } from '../render/LiveCanvas';
+import { drawNightCastle } from '../render/menuScenes';
+
+const SCREEN = Dimensions.get('window');
 
 interface ResultCardProps {
   visible: boolean;
@@ -15,6 +22,53 @@ interface ResultCardProps {
   onMenu: () => void;
 }
 
+const C = {
+  gold: '#F2B54A',
+  goldText: '#F0B04A',
+  bronze: '#7A6040',
+  bronzeDim: 'rgba(160, 125, 80, 0.28)',
+  title: '#EFE8DC',
+  header: '#B9B2A6',
+  subtitle: '#8D9AB8',
+  label: '#9C9CA4',
+  value: '#E8E6E1',
+  starOff: '#3A3A3E',
+  panelBorder: 'rgba(255, 255, 255, 0.09)',
+};
+
+/** Splits "★★ — complete in under 25s. You took 59s." into readable text + the highlighted value. */
+function parseReason(reason: string) {
+  const text = reason.replace(/^[★\s]*—\s*/, '');
+  const pretty = text.charAt(0).toUpperCase() + text.slice(1);
+  const m = pretty.match(/^(.*\b(?:took|had)\s+)(\S+?)(\.?)$/);
+  const isTime = /under\s+\d+s/.test(pretty);
+  if (!m) return { before: pretty, highlight: '', after: '', isTime };
+  return { before: m[1], highlight: m[2], after: m[3], isTime };
+}
+
+/** Card outline with concave notched corners. */
+function frame(w: number, h: number, inset: number, r: number) {
+  const x0 = inset;
+  const y0 = inset;
+  const x1 = w - inset;
+  const y1 = h - inset;
+  return (
+    `M${x0 + r},${y0}H${x1 - r}A${r},${r} 0 0 0 ${x1},${y0 + r}` +
+    `V${y1 - r}A${r},${r} 0 0 0 ${x1 - r},${y1}` +
+    `H${x0 + r}A${r},${r} 0 0 0 ${x0},${y1 - r}` +
+    `V${y0 + r}A${r},${r} 0 0 0 ${x0 + r},${y0}Z`
+  );
+}
+
+const GoldLine: React.FC<{ flip?: boolean }> = ({ flip }) => (
+  <LinearGradient
+    colors={['rgba(242,181,74,0)', 'rgba(242,181,74,0.75)']}
+    start={{ x: flip ? 1 : 0, y: 0 }}
+    end={{ x: flip ? 0 : 1, y: 0 }}
+    style={styles.headerLine}
+  />
+);
+
 export const ResultCard: React.FC<ResultCardProps> = ({
   visible,
   levelNumber,
@@ -26,12 +80,55 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   onInstantRetry,
   onMenu,
 }) => {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize({ w: Math.round(width), h: Math.round(height) });
+  };
+  const reason = score.missingStarReason ? parseReason(score.missingStarReason) : null;
+  const ReasonIcon = reason?.isTime === false ? Radio : Timer;
+
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      {/* moonlit castle the bat escaped to */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <LiveCanvas width={SCREEN.width} height={SCREEN.height} fps={30} animated={visible} draw={(c, t, w, h) => drawNightCastle(c, t, w, h)} />
+      </View>
+      <LinearGradient
+        colors={['rgba(2, 4, 10, 0.2)', 'rgba(2, 4, 8, 0.5)', 'rgba(0, 0, 0, 0.25)']}
+        style={styles.overlay}
+      >
+        <View style={styles.card} onLayout={onLayout}>
+          {/* Carved frame */}
+          {size.w > 0 && (
+            <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill}>
+              <Defs>
+                <SvgGradient id="rcFill" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#18181B" />
+                  <Stop offset="0.5" stopColor="#111113" />
+                  <Stop offset="1" stopColor="#0B0B0D" />
+                </SvgGradient>
+              </Defs>
+              <Path d={frame(size.w, size.h, 1, 18)} fill="url(#rcFill)" stroke={C.bronze} strokeWidth={1.5} />
+              <Path d={frame(size.w, size.h, 6, 16)} fill="none" stroke={C.bronzeDim} strokeWidth={1} />
+            </Svg>
+          )}
+
+          {/* Top ornament */}
+          <View style={styles.ornament}>
+            <GoldLine />
+            <View style={styles.ornamentDiamond} />
+            <GoldLine flip />
+          </View>
+
           {/* Header */}
-          <Text style={styles.headerTag}>✦ EXTRACTION SUCCESSFUL ✦</Text>
+          <View style={styles.headerRow}>
+            <GoldLine />
+            <Text style={styles.headerTag}>LEVEL</Text>
+            <Text style={styles.headerSpark}>✦</Text>
+            <Text style={styles.headerTag}>COMPLETE</Text>
+            <GoldLine flip />
+          </View>
           <Text style={styles.titleText}>ECHO {levelNumber.toString().padStart(2, '0')}</Text>
           <Text style={styles.subtitleText}>{levelTitle.toUpperCase()}</Text>
 
@@ -40,27 +137,27 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             {[1, 2, 3].map((starIdx) => {
               const earned = starIdx <= score.stars;
               return (
-                <Text
-                  key={starIdx}
-                  style={[
-                    styles.starIcon,
-                    {
-                      color: earned ? PALETTE.shardGold : 'rgba(255,255,255,0.12)',
-                      textShadowColor: earned ? PALETTE.shardGold : 'transparent',
-                      textShadowRadius: 10,
-                    },
-                  ]}
-                >
-                  ★
-                </Text>
+                <View key={starIdx} style={earned ? styles.starGlow : undefined}>
+                  <Star
+                    size={50}
+                    color={earned ? '#FFD27A' : C.starOff}
+                    fill={earned ? C.gold : C.starOff}
+                    strokeWidth={1}
+                  />
+                </View>
               );
             })}
           </View>
 
-          {/* Missing Star Replay Reason */}
-          {score.missingStarReason && (
-            <View style={styles.missingStarBox}>
-              <Text style={styles.missingStarText}>{score.missingStarReason}</Text>
+          {/* Missing star hint */}
+          {reason && (
+            <View style={styles.reasonBox}>
+              <ReasonIcon size={22} color={C.gold} strokeWidth={2} />
+              <Text style={styles.reasonText}>
+                {reason.before}
+                {reason.highlight ? <Text style={styles.reasonHighlight}>{reason.highlight}</Text> : null}
+                {reason.after}
+              </Text>
             </View>
           )}
 
@@ -81,8 +178,8 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             {score.momentumMultiplier > 1.0 && (
               <View style={styles.scoreRow}>
                 <Text style={styles.scoreLabel}>MOMENTUM MULTIPLIER</Text>
-                <Text style={[styles.scoreValue, { color: PALETTE.shardGold }]}>
-                  ×{score.momentumMultiplier.toFixed(1)}
+                <Text style={[styles.scoreValue, styles.goldValue]}>
+                  x{score.momentumMultiplier.toFixed(1)}
                 </Text>
               </View>
             )}
@@ -90,18 +187,14 @@ export const ResultCard: React.FC<ResultCardProps> = ({
             {score.perfectEchoBonus > 0 && (
               <View style={styles.scoreRow}>
                 <Text style={styles.scoreLabel}>PERFECT ECHO BONUS</Text>
-                <Text style={[styles.scoreValue, { color: PALETTE.sonarCyan }]}>
-                  +{score.perfectEchoBonus}
-                </Text>
+                <Text style={[styles.scoreValue, styles.goldValue]}>+{score.perfectEchoBonus}</Text>
               </View>
             )}
 
             {score.blindFinishBonus > 0 && (
               <View style={styles.scoreRow}>
                 <Text style={styles.scoreLabel}>BLIND FINISH BONUS</Text>
-                <Text style={[styles.scoreValue, { color: PALETTE.goalViolet }]}>
-                  +{score.blindFinishBonus}
-                </Text>
+                <Text style={[styles.scoreValue, styles.goldValue]}>+{score.blindFinishBonus}</Text>
               </View>
             )}
 
@@ -112,42 +205,48 @@ export const ResultCard: React.FC<ResultCardProps> = ({
               <Text style={styles.totalValue}>{score.totalScore}</Text>
             </View>
 
-            <View style={styles.shardRewardRow}>
-              <Text style={styles.shardRewardLabel}>ECHO SHARDS EARNED</Text>
-              <Text style={styles.shardRewardValue}>+{shardsEarned} ✦</Text>
+            <View style={styles.divider} />
+
+            <View style={styles.scoreRow}>
+              <View style={styles.shardLabelWrap}>
+                <Star size={20} color={C.gold} fill={C.gold} strokeWidth={1} />
+                <Text style={styles.shardRewardLabel}>ECHO SHARDS EARNED</Text>
+              </View>
+              <Text style={styles.shardRewardValue}>+{shardsEarned}</Text>
             </View>
           </View>
 
           {/* Action Buttons */}
           <View style={styles.buttonStack}>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={onNextLevel}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryButtonText}>NEXT ECHO →</Text>
-            </TouchableOpacity>
+            <Pressable onPress={onNextLevel} style={({ pressed }) => [styles.primaryWrap, pressed && styles.pressed]}>
+              <LinearGradient
+                colors={['#F3C47A', '#E2A95A', '#C98C42']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>NEXT ECHO</Text>
+                <ArrowRight size={20} color="#1A1206" strokeWidth={2.4} />
+              </LinearGradient>
+            </Pressable>
 
             <View style={styles.secondaryRow}>
-              <TouchableOpacity
-                style={styles.secondaryButton}
+              <Pressable
                 onPress={onInstantRetry}
-                activeOpacity={0.7}
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
               >
-                <Text style={styles.secondaryButtonText}>↺ RETRY CLEANER</Text>
-              </TouchableOpacity>
+                <RotateCw size={20} color="#B8B4AC" strokeWidth={2.2} />
+                <Text style={styles.secondaryButtonText}>RETRY</Text>
+              </Pressable>
 
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={onMenu}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.secondaryButtonText}>≡ MENU</Text>
-              </TouchableOpacity>
+              <Pressable onPress={onMenu} style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
+                <Menu size={20} color="#B8B4AC" strokeWidth={2.2} />
+                <Text style={styles.secondaryButtonText}>MENU</Text>
+              </Pressable>
             </View>
           </View>
         </View>
-      </View>
+      </LinearGradient>
     </Modal>
   );
 };
@@ -155,95 +254,138 @@ export const ResultCard: React.FC<ResultCardProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(4, 6, 10, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 18,
   },
   card: {
     width: '100%',
-    maxWidth: 340,
-    backgroundColor: '#080D16',
-    borderRadius: 8,
-    padding: 22,
+    maxWidth: 360,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 26,
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: PALETTE.sonarCyan,
-    shadowColor: PALETTE.sonarCyan,
-    shadowOffset: { width: 0, height: 0 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.8,
-    shadowRadius: 18,
+    shadowRadius: 24,
+    elevation: 16,
   },
-  headerTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: PALETTE.goalViolet,
-    letterSpacing: 2,
+  ornament: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    width: 90,
+    marginBottom: 6,
+  },
+  ornamentDiamond: {
+    width: 7,
+    height: 7,
+    borderWidth: 1,
+    borderColor: C.gold,
+    transform: [{ rotate: '45deg' }],
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: 8,
     marginBottom: 4,
   },
+  headerLine: {
+    flex: 1,
+    height: 1,
+  },
+  headerTag: {
+    fontFamily: UI.font.label,
+    fontSize: 12,
+    color: C.header,
+    letterSpacing: 3,
+  },
+  headerSpark: {
+    fontSize: 14,
+    color: C.gold,
+    textShadowColor: C.gold,
+    textShadowRadius: 8,
+  },
   titleText: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 2,
+    fontFamily: UI.font.heading,
+    fontSize: 42,
+    color: C.title,
+    letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.9)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   subtitleText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    letterSpacing: 1.5,
+    fontFamily: UI.font.label,
+    fontSize: 12,
+    color: C.subtitle,
+    letterSpacing: 3.5,
     marginTop: 2,
     marginBottom: 14,
   },
   starsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14,
+    gap: 22,
+    marginBottom: 18,
   },
-  starIcon: {
-    fontSize: 34,
+  starGlow: {
+    shadowColor: '#FFB437',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
   },
-  missingStarBox: {
-    backgroundColor: 'rgba(255, 201, 107, 0.08)',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 201, 107, 0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 12,
-    width: '100%',
+  reasonBox: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginBottom: 16,
   },
-  missingStarText: {
-    fontSize: 10,
-    color: PALETTE.shardGold,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textAlign: 'center',
+  reasonText: {
+    flex: 1,
+    fontFamily: UI.font.tech,
+    fontSize: 15,
+    color: '#D6D3CD',
+    letterSpacing: 0.4,
+  },
+  reasonHighlight: {
+    fontFamily: UI.font.techBold,
+    color: C.goldText,
   },
   ghostBadge: {
-    backgroundColor: 'rgba(77, 240, 255, 0.08)',
-    borderRadius: 4,
+    backgroundColor: 'rgba(242, 181, 74, 0.08)',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: PALETTE.sonarCyan,
+    borderColor: 'rgba(242, 181, 74, 0.4)',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     marginBottom: 14,
   },
   ghostBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: PALETTE.sonarCyan,
+    fontFamily: UI.font.techBold,
+    fontSize: 11,
+    color: C.goldText,
     letterSpacing: 1.2,
   },
   scoreGrid: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 18,
+    alignSelf: 'stretch',
+    marginHorizontal: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    gap: 6,
+    borderColor: C.panelBorder,
+    gap: 10,
   },
   scoreRow: {
     flexDirection: 'row',
@@ -251,92 +393,105 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scoreLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '700',
-    letterSpacing: 1.2,
+    fontFamily: UI.font.tech,
+    fontSize: 13,
+    color: C.label,
+    letterSpacing: 1.6,
   },
   scoreValue: {
-    fontSize: 12,
-    color: '#CBD5E1',
-    fontWeight: '700',
+    fontFamily: UI.font.techBold,
+    fontSize: 15,
+    color: C.value,
     fontVariant: ['tabular-nums'],
+  },
+  goldValue: {
+    color: C.goldText,
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginVertical: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   totalLabel: {
-    fontSize: 11,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    letterSpacing: 1.5,
+    fontFamily: UI.font.techBold,
+    fontSize: 17,
+    color: '#F2F0EB',
+    letterSpacing: 2,
   },
   totalValue: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    letterSpacing: 1,
+    fontFamily: UI.font.techBold,
+    fontSize: 24,
+    color: '#F7F5F0',
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
   },
-  shardRewardRow: {
+  shardLabelWrap: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 10,
   },
   shardRewardLabel: {
-    fontSize: 10,
-    color: PALETTE.shardGold,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontFamily: UI.font.techBold,
+    fontSize: 13,
+    color: C.goldText,
+    letterSpacing: 1.4,
   },
   shardRewardValue: {
-    fontSize: 13,
-    color: PALETTE.shardGold,
-    fontWeight: '900',
+    fontFamily: UI.font.techBold,
+    fontSize: 20,
+    color: C.goldText,
   },
   buttonStack: {
-    width: '100%',
-    gap: 8,
+    alignSelf: 'stretch',
+    gap: 12,
+  },
+  primaryWrap: {
+    borderRadius: 8,
+    shadowColor: '#E8A84A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
   },
   primaryButton: {
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 6,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: PALETTE.sonarCyan,
-    shadowColor: PALETTE.sonarCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
+    gap: 14,
+    height: 54,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F8D9A0',
   },
   primaryButtonText: {
-    color: '#04060A',
-    fontWeight: '900',
-    fontSize: 13,
-    letterSpacing: 2,
+    fontFamily: UI.font.techBold,
+    color: '#1A1206',
+    fontSize: 18,
+    letterSpacing: 2.6,
   },
   secondaryRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   secondaryButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 6,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    gap: 14,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255, 255, 255, 0.14)',
   },
   secondaryButtonText: {
-    color: '#CBD5E1',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 1.2,
+    fontFamily: UI.font.techBold,
+    color: '#D6D3CD',
+    fontSize: 15,
+    letterSpacing: 2,
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
 });

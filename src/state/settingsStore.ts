@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { loadJSON, saveJSON } from './storage';
 
 interface SettingsState {
   soundEnabled: boolean;
@@ -14,22 +15,11 @@ interface SettingsState {
 
 const STORAGE_KEY = 'bats_view_v2_settings';
 
-const loadSavedSettings = (): Partial<SettingsState> => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const data = window.localStorage.getItem(STORAGE_KEY);
-      if (data) return JSON.parse(data);
-    }
-  } catch {}
-  return {};
-};
+const loadSavedSettings = (): Partial<SettingsState> => loadJSON<Partial<SettingsState>>(STORAGE_KEY) ?? {};
 
 const saveSettings = (state: SettingsState) => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-  } catch {}
+  const { soundEnabled, hapticsEnabled, floatingJoystick, devModeUnlocked } = state;
+  saveJSON(STORAGE_KEY, { soundEnabled, hapticsEnabled, floatingJoystick, devModeUnlocked });
 };
 
 const initial = loadSavedSettings();

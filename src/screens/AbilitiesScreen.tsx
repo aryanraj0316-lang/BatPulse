@@ -1,259 +1,168 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { PALETTE } from '../constants/palette';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Animated, Easing } from 'react-native';
+import { Gem, Lock, Check } from 'lucide-react-native';
 import { useProgressStore, ABILITIES } from '../state/progressStore';
+import { useSettingsStore } from '../state/settingsStore';
+import { AudioEngine } from '../engine/AudioEngine';
 import { AbilityId } from '../types/game';
+import { MenuBackground } from '../ui/Chrome';
+import { CarvedHeader, SteelFrame, SectionLabel } from '../ui/Frame';
+import { UI } from '../ui/theme';
+import { LiveCanvas } from '../render/LiveCanvas';
+import { drawSigil, type SigilState } from '../render/menuArt';
 
 interface AbilitiesScreenProps {
   onBack: () => void;
 }
 
+const SLOTS = 2;
+const ORDER: AbilityId[] = ['WIDE_PULSE', 'PIERCING_PING', 'WHISPER_STEP', 'RICOCHET', 'SIXTH_SENSE'];
+
+const Sigil: React.FC<{ id: AbilityId; state: SigilState; size: number; animated?: boolean }> = ({ id, state, size, animated = true }) => (
+  <LiveCanvas width={size} height={size} fps={40} animated={animated && state !== 'locked'} deps={[id, state]} draw={(c, t) => drawSigil(c, t, size, id, state)} />
+);
+
+/** One loadout socket: carved stone ring, holds an equipped sigil or sits empty. */
+const Socket: React.FC<{ id?: AbilityId; onPress?: () => void }> = ({ id, onPress }) => {
+  const pop = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    pop.setValue(0.6);
+    Animated.spring(pop, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
+  }, [id, pop]);
+  return (
+    <Pressable onPress={onPress} disabled={!id} style={styles.socket}>
+      <View style={styles.socketRing}>
+        {id ? (
+          <Animated.View style={{ transform: [{ scale: pop }] }}>
+            <Sigil id={id} state="equipped" size={86} />
+          </Animated.View>
+        ) : (
+          <View style={styles.socketEmpty}>
+            <Text style={styles.socketPlus}>+</Text>
+          </View>
+        )}
+      </View>
+      <Text style={[styles.socketName, !id && { color: '#5E6A78' }]} numberOfLines={1}>
+        {id ? ABILITIES[id].name.toUpperCase() : 'EMPTY SLOT'}
+      </Text>
+    </Pressable>
+  );
+};
+
 export const AbilitiesScreen: React.FC<AbilitiesScreenProps> = ({ onBack }) => {
-  const { shards, unlockedAbilities, equippedAbilities, unlockAbility, toggleEquipAbility } =
-    useProgressStore();
+  const { shards, unlockedAbilities, equippedAbilities, unlockAbility, toggleEquipAbility } = useProgressStore();
+  const { soundEnabled } = useSettingsStore();
+
+  const slots = Array.from({ length: SLOTS }, (_, i) => equippedAbilities[i]);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
-          <Text style={styles.backBtnText}>← BACK</Text>
-        </TouchableOpacity>
-
-        <View style={styles.headerCenter}>
-          <Text style={styles.title}>ABILITY MATRIX</Text>
-          <Text style={styles.subtitle}>2 LOADOUT SLOTS AVAILABLE</Text>
-        </View>
-
-        <Text style={styles.shardCount}>✦ {shards}</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollList} showsVerticalScrollIndicator={false}>
-        {/* Loadout Status Bar */}
-        <View style={styles.loadoutBar}>
-          <Text style={styles.loadoutTitle}>EQUIPPED ABILITIES ({equippedAbilities.length}/2)</Text>
-          <View style={styles.equippedRow}>
-            {equippedAbilities.map((id) => (
-              <View key={id} style={styles.equippedChip}>
-                <Text style={styles.equippedChipText}>{ABILITIES[id]?.name.toUpperCase()}</Text>
-              </View>
-            ))}
-            {equippedAbilities.length === 0 && (
-              <Text style={styles.emptySlotText}>No abilities equipped (tap unlocked cards below)</Text>
-            )}
+      <MenuBackground dim />
+      <CarvedHeader
+        title="ABILITIES"
+        subtitle={`${equippedAbilities.length} / ${SLOTS} SLOTS FILLED`}
+        onBack={onBack}
+        right={
+          <View style={styles.shardChip}>
+            <Gem size={14} color="#7FD8FF" />
+            <Text style={styles.shardText}>{shards}</Text>
           </View>
-        </View>
+        }
+      />
 
-        {/* Ability Cards */}
-        {Object.values(ABILITIES).map((ability) => {
-          const isUnlocked = unlockedAbilities.includes(ability.id);
-          const isEquipped = equippedAbilities.includes(ability.id);
-          const canAfford = shards >= ability.cost;
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Loadout altar */}
+        <SteelFrame cut={18} padding={14} style={{ marginBottom: 18 }} fill={['#0E1A22', '#06090D']}>
+          <View style={styles.altar}>
+            {slots.map((id, i) => (
+              <Socket key={i} id={id} onPress={() => id && toggleEquipAbility(id)} />
+            ))}
+          </View>
+          <Text style={styles.altarHint}>Tap an ability below to equip it. Tap a socket to remove it.</Text>
+        </SteelFrame>
 
+        <SectionLabel>ABILITIES</SectionLabel>
+        {ORDER.map((id) => {
+          const ab = ABILITIES[id];
+          const owned = unlockedAbilities.includes(id);
+          const equipped = equippedAbilities.includes(id);
+          const afford = shards >= ab.cost;
+          const state: SigilState = equipped ? 'equipped' : owned ? 'owned' : 'locked';
+          const onPress = () => {
+            if (owned) {
+              toggleEquipAbility(id);
+              AudioEngine.playShardChime(soundEnabled);
+            } else if (afford && unlockAbility(id)) {
+              AudioEngine.playLevelComplete(soundEnabled);
+            }
+          };
           return (
-            <View
-              key={ability.id}
-              style={[
-                styles.card,
-                {
-                  borderColor: isEquipped
-                    ? PALETTE.sonarCyan
-                    : isUnlocked
-                    ? 'rgba(255, 255, 255, 0.15)'
-                    : 'rgba(255, 255, 255, 0.05)',
-                  backgroundColor: isEquipped
-                    ? 'rgba(77, 240, 255, 0.06)'
-                    : 'rgba(8, 13, 22, 0.5)',
-                },
-              ]}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.abilityName}>{ability.name.toUpperCase()}</Text>
-                {isUnlocked ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.equipBtn,
-                      {
-                        backgroundColor: isEquipped ? PALETTE.sonarCyan : 'rgba(255,255,255,0.08)',
-                      },
-                    ]}
-                    onPress={() => toggleEquipAbility(ability.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.equipBtnText,
-                        { color: isEquipped ? '#000000' : '#FFFFFF' },
-                      ]}
-                    >
-                      {isEquipped ? 'EQUIPPED ✓' : 'EQUIP'}
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.unlockBtn,
-                      {
-                        backgroundColor: canAfford ? PALETTE.shardGold : 'rgba(255,255,255,0.05)',
-                        opacity: canAfford ? 1.0 : 0.4,
-                      },
-                    ]}
-                    disabled={!canAfford}
-                    onPress={() => unlockAbility(ability.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.unlockBtnText,
-                        { color: canAfford ? '#000000' : '#94A3B8' },
-                      ]}
-                    >
-                      UNLOCK {ability.cost} ✦
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              <Text style={styles.abilityDesc}>{ability.description}</Text>
-            </View>
+            <Pressable key={id} onPress={onPress} disabled={!owned && !afford} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.98 : 1 }], marginBottom: 12 })}>
+              <SteelFrame cut={14} padding={12} accent={equipped ? UI.color.cyan : undefined} active={equipped} dim={!owned && !afford}>
+                <View style={styles.cardRow}>
+                  <Sigil id={id} state={state} size={64} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.name, equipped && { color: '#E8FDFF' }]}>{ab.name.toUpperCase()}</Text>
+                    <Text style={styles.desc}>{ab.description}</Text>
+                  </View>
+                  {equipped ? (
+                    <View style={[styles.tag, styles.tagOn]}>
+                      <Check size={12} color="#03161B" strokeWidth={3} />
+                      <Text style={[styles.tagText, { color: '#03161B' }]}>ON</Text>
+                    </View>
+                  ) : owned ? (
+                    <View style={styles.tag}>
+                      <Text style={styles.tagText}>EQUIP</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.tag, afford ? styles.tagGold : styles.tagLocked]}>
+                      {afford ? <Gem size={12} color="#1A1206" /> : <Lock size={11} color="#8592A2" />}
+                      <Text style={[styles.tagText, { color: afford ? '#1A1206' : '#8592A2' }]}>{ab.cost}</Text>
+                    </View>
+                  )}
+                </View>
+              </SteelFrame>
+            </Pressable>
           );
         })}
+        <Text style={styles.foot}>Earn shards by clearing levels and descending in Endless.</Text>
       </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: PALETTE.voidBlack,
-    paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
+  container: { flex: 1, backgroundColor: UI.color.ink, paddingTop: 30 },
+  scroll: { paddingHorizontal: 16, paddingBottom: 40 },
+  shardChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 30, borderRadius: 6, borderWidth: 1, borderColor: UI.color.stoneEdge, backgroundColor: 'rgba(10,14,19,0.85)' },
+  shardText: { fontFamily: UI.font.techBold, fontSize: 14, color: UI.color.text },
+  altar: { flexDirection: 'row', justifyContent: 'space-evenly' },
+  socket: { alignItems: 'center', width: 130 },
+  socketRing: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#5A4A36',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    shadowColor: '#000',
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
   },
-  backBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  backBtnText: {
-    color: '#CBD5E1',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  subtitle: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: PALETTE.sonarCyan,
-    letterSpacing: 1.5,
-  },
-  shardCount: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: PALETTE.shardGold,
-    letterSpacing: 1,
-  },
-  scrollList: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    gap: 12,
-  },
-  loadoutBar: {
-    backgroundColor: 'rgba(77, 240, 255, 0.05)',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(77, 240, 255, 0.15)',
-    padding: 12,
-    marginBottom: 8,
-  },
-  loadoutTitle: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: PALETTE.sonarCyan,
-    letterSpacing: 1.5,
-    marginBottom: 6,
-  },
-  equippedRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  equippedChip: {
-    backgroundColor: PALETTE.sonarCyan,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 3,
-  },
-  equippedChipText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#000000',
-    letterSpacing: 1,
-  },
-  emptySlotText: {
-    fontSize: 10,
-    color: '#64748B',
-    fontStyle: 'italic',
-  },
-  card: {
-    borderRadius: 6,
-    padding: 16,
-    borderWidth: 1.5,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  abilityName: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 1.5,
-  },
-  abilityDesc: {
-    fontSize: 12,
-    color: '#94A3B8',
-    lineHeight: 18,
-    letterSpacing: 0.4,
-  },
-  equipBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  equipBtnText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  unlockBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  unlockBtnText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
+  socketEmpty: { width: 78, height: 78, borderRadius: 39, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(160,175,195,0.35)', alignItems: 'center', justifyContent: 'center' },
+  socketPlus: { fontFamily: UI.font.tech, fontSize: 28, color: 'rgba(160,175,195,0.45)' },
+  socketName: { fontFamily: UI.font.label, fontSize: 11.5, letterSpacing: 1.6, color: UI.color.cyanSoft, marginTop: 8 },
+  altarHint: { fontFamily: UI.font.body, fontSize: 12.5, color: '#7E8B9A', textAlign: 'center', marginTop: 10 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  name: { fontFamily: UI.font.heading, fontSize: 15, letterSpacing: 1.2, color: '#E8ECF0' },
+  desc: { fontFamily: UI.font.body, fontSize: 13.5, color: '#93A0B0', marginTop: 2, lineHeight: 18 },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(160,175,195,0.45)', backgroundColor: 'rgba(0,0,0,0.35)' },
+  tagOn: { backgroundColor: UI.color.cyan, borderColor: UI.color.cyan },
+  tagGold: { backgroundColor: UI.color.gold, borderColor: UI.color.gold },
+  tagLocked: { borderColor: 'rgba(120,130,145,0.3)' },
+  tagText: { fontFamily: UI.font.techBold, fontSize: 12.5, letterSpacing: 1.5, color: '#D8E0E8' },
+  foot: { fontFamily: UI.font.body, fontSize: 12.5, color: '#6E7A88', textAlign: 'center', marginTop: 6 },
 });

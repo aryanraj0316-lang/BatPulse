@@ -38,20 +38,35 @@ import { useSettingsStore } from '../state/settingsStore';
 import { GameCanvas, GameCanvasHandle } from '../render/GameCanvas';
 import type { JoystickState } from '../render/skia/SceneRenderer';
 import { HUD } from '../components/HUD';
+import { Map as MapIcon, FastForward } from 'lucide-react-native';
+import { UI } from '../ui/theme';
 import { PauseOverlay } from '../components/PauseOverlay';
 import { DevLevelPicker } from '../components/DevLevelPicker';
 import { ResultCard } from '../components/ResultCard';
+import { ChapterBanner } from '../components/ChapterBanner';
+import { skinOf } from '../skins/skins';
+import { biomeForLevel, CHAPTER_SIZE } from '../render/themes/biomes';
+import { RunOverlay } from '../components/RunOverlay';
+import { HintToast } from '../components/HintToast';
+import { type RunInfo, runLevelId, runFloorSeed, floorShards, runDay } from '../levels/runs';
 
 interface GameScreenProps {
   levelId: number;
   onExitToMenu: () => void;
   onNextLevel: (nextLevelId: number) => void;
+  /** Endless / Daily run in progress (campaign when absent) */
+  run?: RunInfo;
+  /** continue the run on its next floor */
+  onRunAdvance?: (next: RunInfo) => void;
+  /** start a fresh run of the same mode */
+  onRunRestart?: () => void;
 }
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const JOY_RADIUS = 50;
 const TAP_MAX_MS = 260; // a touch shorter than this that barely moves = sonar tap
 const TAP_MAX_MOVE = 12; // px a finger may wander and still count as a tap
+const LONG_PRESS_MS = TAP_MAX_MS; // holding still this long summons the joystick
 const restingJoystick = (): JoystickState => ({
   center: { x: SW - 75, y: SH - 85 },
   knob: { x: 0, y: 0 },
@@ -63,20 +78,45 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   levelId,
   onExitToMenu,
   onNextLevel,
+  run,
+  onRunAdvance,
+  onRunRestart,
 }) => {
-  const { records, recordLevelVictory, equippedAbilities } = useProgressStore();
-  const { soundEnabled, hapticsEnabled } = useSettingsStore();
+  const { records, recordLevelVictory, equippedAbilities, equippedSkin } = useProgressStore();
+  const { soundEnabled, hapticsEnabled, devModeUnlocked } = useSettingsStore();
+  const runRef = useRef(run);
+  runRef.current = run;
 
-  const level = useMemo(
-    () => LevelFactory.createLevel(levelId, undefined, SW, SH),
-    [levelId]
-  );
+  const level = useMemo(() => {
+    if (!run) return LevelFactory.createLevel(levelId, undefined, SW, SH);
+    const lv = LevelFactory.createLevel(runLevelId(run.floor), runFloorSeed(run), SW, SH);
+    return { ...lv, name: run.mode === 'daily' ? 'Daily Descent' : 'Endless Descent' };
+  }, [levelId, run?.mode, run?.floor, run?.seed]); // eslint-disable-line react-hooks/exhaustive-deps
   const existingRecord = records[levelId];
 
   const hasWidePulse = equippedAbilities.includes('WIDE_PULSE');
   const hasPiercing = equippedAbilities.includes('PIERCING_PING');
   const hasWhisperStep = equippedAbilities.includes('WHISPER_STEP');
+  const hasRicochet = equippedAbilities.includes('RICOCHET');
+  const hasSixthSense = equippedAbilities.includes('SIXTH_SENSE');
   const sonarRadius = hasWidePulse ? GAME_CONFIG.SONAR_RADIUS * 1.4 : GAME_CONFIG.SONAR_RADIUS;
+
+  // Equipped skin: its look is drawn by the renderer, its power tweaks the numbers below
+  const skin = useMemo(() => skinOf(equippedSkin), [equippedSkin]);
+  const power = skin.power;
+  const maxSonar = level.sonar.allowance >= 999 ? level.sonar.allowance : level.sonar.allowance + (power.extraPulse ?? 0);
+  const reloadMs = GAME_CONFIG.SONAR_RELOAD_MS * (power.reloadMult ?? 1);
+  const revealHold = GAME_CONFIG.REVEAL_HOLD_MS + (power.revealHoldMs ?? 0);
+
+  // Chapter title card on the first level of each biome
+  const biome = biomeForLevel(levelId);
+  const chapterOpen = !run && (levelId - 1) % CHAPTER_SIZE === 0;
+  const twistNote =
+    levelId === GAME_CONFIG.CRUSHER_FIRST_LEVEL
+      ? 'NEW · Crushers slam shut across corridors. Watch their glow, then dash.'
+      : levelId === GAME_CONFIG.RIFT_FIRST_LEVEL
+      ? 'NEW · Rifts are linked portals. Fly into one, come out of its twin.'
+      : null;
 
   // HUD values. Only pushed to React when they actually change (not every frame).
   const [hud, setHud] = useState({
@@ -99,7 +139,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       frenzy: frenzyRef.current,
       lastPingAt: lastPingRef.current,
       // -1 = not reloading; otherwise 0..1 in 1/20 steps (so the HUD redraws only ~5×/s)
-      reload: reloadingRef.current ? Math.floor((reloadMsRef.current / GAME_CONFIG.SONAR_RELOAD_MS) * 20) / 20 : -1,
+      reload: reloadingRef.current ? Math.floor((reloadMsRef.current / reloadMs) * 20) / 20 : -1,
       // 0 = no key in this level, 1 = key still hidden, 2 = key collected
       keyState: objectsRef.current.some((o) => o.type === 'key') ? (objectsRef.current.some((o) => o.type === 'key' && !o.collected) ? 1 : 2) : 0,
     };
@@ -129,11 +169,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const [scoreResult, setScoreResult] = useState<ScoreBreakdown | null>(null);
   const [shardsEarned, setShardsEarned] = useState(0);
   const [isRedStatic, setIsRedStatic] = useState(false);
+  // Endless / Daily: floor cleared or run over
+  const [runCard, setRunCard] = useState<null | { kind: 'cleared' | 'over'; floor: number; floorShards: number; runShards: number; best: number; newBest: boolean }>(null);
+  // delayed echoes: Ricochet bounces and the Sixth Sense exit glow
+  const pendingEchoRef = useRef<{ x: number; y: number; at: number; sense?: boolean }[]>([]);
 
-  // Joystick (drawn by the Skia canvas; rests in the bottom-right corner)
+  // Joystick (drawn by the Skia canvas; hidden until a long press or drag summons it)
   const joyRef = useRef<JoystickState>(restingJoystick());
   // Active touches: which one steers, and which are still candidate taps
-  const touchesRef = useRef(new Map<number, { x0: number; y0: number; t0: number; steering: boolean }>());
+  const touchesRef = useRef(
+    new Map<number, { x0: number; y0: number; t0: number; steering: boolean; hold?: ReturnType<typeof setTimeout> }>()
+  );
 
   // Mutable game state
   const playerRef = useRef<PlayerEntity>(null as any);
@@ -164,6 +210,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const trackRef = useRef<GhostPoint[]>([]);
   const rafRef = useRef<number | null>(null);
   const pausedRef = useRef(false);
+  // rift the bat just arrived in (no teleport back until it flies out)
+  const riftLockRef = useRef<string | null>(null);
   const wonRef = useRef(false);
 
   // Level init
@@ -212,14 +260,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       revealStrength: 0,
     };
     wraithsRef.current = level.hunters.map((h) =>
-      HunterAI.create(h.anchor, h.speedMultiplier, buildNavGrid(level, SW, SH, level.objects))
+      Object.assign(HunterAI.create(h.anchor, (h.speedMultiplier ?? 1) * (power.wraithSpeedMult ?? 1), buildNavGrid(level, SW, SH, level.objects)), {
+        visionScale: power.visionMult ?? 1,
+      })
     );
     wavesRef.current = [];
     revealsRef.current = [];
     sparksRef.current = [];
     dustRef.current = dust;
     inputRef.current = { x: 0, y: 0 };
-    sonarLeftRef.current = level.sonar.allowance;
+    sonarLeftRef.current = maxSonar;
+    riftLockRef.current = null;
+    pendingEchoRef.current = hasSixthSense ? [{ x: level.goal.x, y: level.goal.y, at: Date.now() + 900, sense: true }] : [];
     reloadingRef.current = false;
     reloadMsRef.current = 0;
     pulsesFiredRef.current = 0;
@@ -236,11 +288,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     setIsWon(false);
     setScoreResult(null);
     setShardsEarned(0);
+    setRunCard(null);
     setIsRedStatic(false);
     joyRef.current = restingJoystick();
     touchesRef.current.clear();
     syncHud(true);
-  }, [level]);
+  }, [level, maxSonar, power, hasSixthSense]);
 
   useEffect(() => {
     AudioEngine.preload(); // load every sound now so nothing loads mid-game
@@ -260,7 +313,21 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     AudioEngine.playDeath(soundEnabled);
     HapticEngine.death(hapticsEnabled);
     setIsRedStatic(true);
-    setTimeout(() => initLevel(), 250);
+    const r = runRef.current;
+    if (!r) {
+      setTimeout(() => initLevel(), 250);
+      return;
+    }
+    // one life per run: record how deep the bat got and show the run summary
+    wonRef.current = true;
+    const depth = r.floor - 1;
+    const store = useProgressStore.getState();
+    const prevBest = r.mode === 'daily' ? (store.dailyDay === runDay(r) ? store.dailyBestDepth : 0) : store.endlessHighScore;
+    const newBest = r.mode === 'daily' ? store.recordDailyScore(runDay(r), depth) : store.recordEndlessScore(depth);
+    setTimeout(() => {
+      setIsRedStatic(false);
+      setRunCard({ kind: 'over', floor: r.floor, floorShards: 0, runShards: r.shards, best: Math.max(prevBest, depth), newBest });
+    }, 420);
   }, [hapticsEnabled, soundEnabled, initLevel]);
 
   // Elapsed timer
@@ -315,11 +382,36 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         createdAt: now,
         intensity: 1.0,
         followsPlayer: true,
+        hold: revealHold,
       },
     ];
+    if (hasRicochet) {
+      for (const b of SonarSystem.ricochetPoints(playerRef.current.pos, sonarRadius, gridRef.current, objectsRef.current)) {
+        pendingEchoRef.current.push({ x: b.x, y: b.y, at: now + (b.dist / 460) * 1000 + 120 });
+      }
+    }
     AudioEngine.playSonarPulse(soundEnabled);
     HapticEngine.ping(hapticsEnabled);
-  }, [level, sonarRadius, hasPiercing, soundEnabled, hapticsEnabled]);
+  }, [level, sonarRadius, hasPiercing, hasRicochet, soundEnabled, hapticsEnabled, revealHold]);
+
+  // Web-only preview: `?run=endless&runcard=over|cleared` shows the run summary card
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !run || typeof window === 'undefined') return;
+    const m = window.location.search.match(/[?&]runcard=(over|cleared)/);
+    if (m) setTimeout(() => setRunCard({ kind: m[1] as 'over' | 'cleared', floor: 7, floorShards: 18, runShards: 96, best: 9, newBest: m[1] === 'cleared' }), 500);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Web-only preview: `?level=5&win` shows the Level Complete card
+  useEffect(() => {
+    if (Platform.OS !== 'web' || run || typeof window === 'undefined' || !/[?&]win(&|$)/.test(window.location.search)) return;
+    setTimeout(() => {
+      runningRef.current = false;
+      wonRef.current = true;
+      setScoreResult(ScoringSystem.evaluateScore(level, 24, 3, maxSonar, 0, true, false));
+      setShardsEarned(12);
+      setIsWon(true);
+    }, 600);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Web-only preview: `?autopulse` fires the sonar every 1.8s (handy for screenshots / attract mode)
   useEffect(() => {
@@ -388,8 +480,32 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     for (const tch of changedTouches(e)) {
       const id = tch.identifier ?? 0;
       if (touchesRef.current.has(id)) continue;
-      touchesRef.current.set(id, { x0: tch.pageX, y0: tch.pageY, t0: Date.now(), steering: false });
+      const tr: { x0: number; y0: number; t0: number; steering: boolean; hold?: ReturnType<typeof setTimeout> } = {
+        x0: tch.pageX,
+        y0: tch.pageY,
+        t0: Date.now(),
+        steering: false,
+      };
+      // Long press: if the finger is still down (and nobody steers yet), it becomes the joystick
+      tr.hold = setTimeout(() => {
+        if (touchesRef.current.get(id) !== tr || tr.steering) return;
+        let someoneSteering = false;
+        touchesRef.current.forEach((t) => {
+          if (t.steering) someoneSteering = true;
+        });
+        if (someoneSteering) return;
+        startSteering(tr);
+      }, LONG_PRESS_MS);
+      touchesRef.current.set(id, tr);
     }
+  };
+
+  /** Turn a finger into the floating joystick, centred where it first touched. */
+  const startSteering = (tr: { x0: number; y0: number; steering: boolean }) => {
+    tr.steering = true;
+    joyRef.current.center = { x: tr.x0, y: tr.y0 };
+    joyRef.current.knob = { x: 0, y: 0 };
+    joyRef.current.active = true;
   };
 
   const onTouchMove = (e: GestureResponderEvent) => {
@@ -401,11 +517,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       const tr = touchesRef.current.get(tch.identifier ?? 0);
       if (!tr) continue;
       if (!tr.steering && !someoneSteering && Math.hypot(tch.pageX - tr.x0, tch.pageY - tr.y0) > TAP_MAX_MOVE) {
-        // This finger becomes the floating joystick, centred where it first touched
-        tr.steering = true;
+        startSteering(tr);
         someoneSteering = true;
-        joyRef.current.center = { x: tr.x0, y: tr.y0 };
-        joyRef.current.active = true;
       }
       if (tr.steering) {
         const dx = tch.pageX - joyRef.current.center.x;
@@ -424,6 +537,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       const id = tch.identifier ?? 0;
       const tr = touchesRef.current.get(id);
       if (!tr) continue;
+      if (tr.hold) clearTimeout(tr.hold);
       touchesRef.current.delete(id);
       if (tr.steering) {
         inputRef.current = { x: 0, y: 0 };
@@ -435,6 +549,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   };
 
   const onTouchCancel = () => {
+    touchesRef.current.forEach((t) => t.hold && clearTimeout(t.hold));
     touchesRef.current.clear();
     inputRef.current = { x: 0, y: 0 };
     joyRef.current = restingJoystick();
@@ -455,9 +570,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       revealZones: revealsRef.current,
       sparks: sparksRef.current,
       dust: dustRef.current,
-      ghostTrack: existingRecord?.ghostTrack,
+      // a ghost recorded on an older layout of this level (different start) would fly through walls
+      ghostTrack:
+        existingRecord?.ghostTrack?.length &&
+        Math.hypot(existingRecord.ghostTrack[0].x - level.spawn.x, existingRecord.ghostTrack[0].y - level.spawn.y) < 40
+          ? existingRecord.ghostTrack
+          : undefined,
       isHunting: wraithsRef.current.some((w) => w.state === 'HUNTING' || w.state === 'FRENZY'),
       joystick: joyRef.current,
+      skin,
       revealAll: revealAllRef.current || undefined,
       batFx: {
         pingAt: lastPingRef.current,
@@ -494,7 +615,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       }
 
       // 1. Move Player Physics
-      const mv = MovementSystem.updatePlayer(p, inputRef.current, hasWhisperStep, dt, now);
+      const mv = MovementSystem.updatePlayer(p, inputRef.current, hasWhisperStep, dt, now, power.speedMult ?? 1);
 
       trackRef.current.push({
         t: elapsedRef.current * 1000,
@@ -550,9 +671,28 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         triggerRestart();
         return;
       }
+      // 3a. Twists: crushers kill, rifts carry the bat to their twin
+      if (CollisionSystem.checkCrusher(p.pos, p.radius, objectsRef.current, now)) {
+        triggerRestart();
+        return;
+      }
+      const rift = CollisionSystem.checkRift(p.pos, objectsRef.current);
+      if (!rift) riftLockRef.current = null;
+      else if (riftLockRef.current !== rift.id) {
+        const twin = objectsRef.current.find((o) => o.id === rift.pairId);
+        if (twin) {
+          p.pos = { x: twin.x + twin.width / 2, y: twin.y + twin.height / 2 };
+          riftLockRef.current = twin.id; // don't bounce straight back until the bat leaves it
+          rift.lastHitTime = now;
+          twin.lastHitTime = now;
+          pickupAtRef.current = now;
+          AudioEngine.playSonarPulse(soundEnabled);
+          HapticEngine.shardPickup(hapticsEnabled);
+        }
+      }
       if (CollisionSystem.checkShardCollection(p.pos, p.radius, objectsRef.current)) {
         pickupAtRef.current = now; // visual reaction only
-        sonarLeftRef.current = Math.min(level.sonar.allowance, sonarLeftRef.current + 1);
+        sonarLeftRef.current = Math.min(maxSonar, sonarLeftRef.current + 1);
         AudioEngine.playShardChime(soundEnabled);
         HapticEngine.shardPickup(hapticsEnabled);
       }
@@ -569,16 +709,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       }
 
       // 3c. Sonar reload: at/below the threshold it recharges one pulse at a time until full
-      if (level.sonar.allowance < 999) {
+      if (maxSonar < 999) {
         if (sonarLeftRef.current <= GAME_CONFIG.SONAR_RELOAD_BELOW) reloadingRef.current = true;
         if (reloadingRef.current) {
           reloadMsRef.current += dt * 1000;
-          if (reloadMsRef.current >= GAME_CONFIG.SONAR_RELOAD_MS) {
+          if (reloadMsRef.current >= reloadMs) {
             reloadMsRef.current = 0;
-            sonarLeftRef.current = Math.min(level.sonar.allowance, sonarLeftRef.current + 1);
+            sonarLeftRef.current = Math.min(maxSonar, sonarLeftRef.current + 1);
             AudioEngine.playShardChime(soundEnabled);
           }
-          if (sonarLeftRef.current >= level.sonar.allowance) {
+          if (sonarLeftRef.current >= maxSonar) {
             reloadingRef.current = false;
             reloadMsRef.current = 0;
           }
@@ -593,13 +733,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         AudioEngine.playLevelComplete(soundEnabled);
         HapticEngine.victory(hapticsEnabled);
 
+        const r = runRef.current;
+        if (r) {
+          const got = Math.round(floorShards(r.floor) * (power.shardMult ?? 1));
+          useProgressStore.getState().addShards(got);
+          const store = useProgressStore.getState();
+          const best = r.mode === 'daily' ? store.dailyBestDepth : store.endlessHighScore;
+          setRunCard({ kind: 'cleared', floor: r.floor, floorShards: got, runShards: r.shards + got, best, newBest: r.floor > best });
+          setIsWon(true);
+          return;
+        }
+
         // pulses actually fired (the reload means "allowance − left" is no longer the count)
         const used = level.sonar.allowance >= 999 ? 1 : Math.max(1, pulsesFiredRef.current);
         const sc = ScoringSystem.evaluateScore(
           level,
           elapsedRef.current,
           used,
-          level.sonar.allowance,
+          maxSonar,
           p.momentum,
           ghostRef.current,
           false
@@ -611,7 +762,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           sc.stars,
           ghostRef.current,
           sc.perfectEchoBonus > 0,
-          trackRef.current
+          trackRef.current,
+          power.shardMult ?? 1
         );
 
         setScoreResult(sc);
@@ -650,6 +802,22 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         );
         secondaryPings.push(...res.secondaryPings);
       }
+      if (pendingEchoRef.current.length) {
+        const due = pendingEchoRef.current.filter((e) => e.at <= now);
+        if (due.length) {
+          pendingEchoRef.current = pendingEchoRef.current.filter((e) => e.at > now);
+          for (const e of due) {
+            if (e.sense) {
+              // Sixth Sense: the exit glows briefly through the dark
+              revealsRef.current.push({ id: `ss_${now}`, x: e.x, y: e.y, maxRadius: 70, createdAt: now, intensity: 0.85, hold: 1500 });
+              goalRef.current.revealedAt = now;
+              goalRef.current.revealStrength = 1;
+            } else {
+              secondaryPings.push({ x: e.x, y: e.y });
+            }
+          }
+        }
+      }
       for (const sp of secondaryPings) {
         liveWaves.push({
           id: `s${now}${Math.random()}`,
@@ -672,7 +840,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       }
       wavesRef.current = liveWaves;
       const zoneLife =
-        GAME_CONFIG.SONAR_EXPAND_DURATION * 1000 + GAME_CONFIG.REVEAL_HOLD_MS + GAME_CONFIG.REVEAL_FADE_MS;
+        GAME_CONFIG.SONAR_EXPAND_DURATION * 1000 + revealHold + GAME_CONFIG.REVEAL_FADE_MS;
       if (revealsRef.current.length && now - revealsRef.current[0].createdAt > zoneLife) {
         revealsRef.current = revealsRef.current.filter((z) => now - z.createdAt <= zoneLife);
       }
@@ -753,15 +921,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     soundEnabled,
     recordLevelVictory,
     triggerRestart,
+    maxSonar,
+    reloadMs,
+    revealHold,
+    power,
   ]);
 
 
   return (
-    <View style={[styles.container, isRedStatic && styles.redStatic]}>
+    <View style={[styles.container, { backgroundColor: biome.ui.ink }, isRedStatic && styles.redStatic]}>
       {/* 1. GPU GAME CANVAS (Skia) — also draws the floating joystick */}
       <GameCanvas ref={canvasRef} level={level} worldWidth={SW} worldHeight={SH} />
 
-      {/* 2. WHOLE-SCREEN TOUCH: tap anywhere = sonar, drag = joystick */}
+      {/* 2. WHOLE-SCREEN TOUCH: tap anywhere = sonar, long press / drag = joystick */}
       <View
         style={StyleSheet.absoluteFill}
         onStartShouldSetResponder={() => true}
@@ -774,12 +946,21 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         onResponderTerminate={onTouchCancel}
       />
 
+      {/* 3. CHAPTER TITLE (first level of each biome) */}
+      {chapterOpen && <ChapterBanner key={levelId} biome={biome} levelNumber={levelId} levelName={level.name} twist={twistNote} />}
+
+      {/* first-time tips: the tutorial levels, and each chapter's opener (after its title card) */}
+      {!run && level.hint && !existingRecord?.completed && (levelId <= 8 || chapterOpen) && !twistNote && (
+        <HintToast key={`hint${levelId}`} text={level.hint} delay={chapterOpen ? 4600 : 900} />
+      )}
+
       {/* 4. HEADS-UP DISPLAY */}
       <HUD
         levelTitle={level.name}
         levelNumber={level.id}
+        levelLabel={run ? `FLOOR ${run.floor}` : undefined}
         sonarRemaining={hud.sonar}
-        maxSonar={level.sonar.allowance}
+        maxSonar={maxSonar}
         elapsedSeconds={hud.elapsed}
         momentum={hud.momentum}
         isFrenzy={hud.frenzy}
@@ -789,8 +970,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         keyState={hud.keyState}
       />
 
-      {/* 5a. See Map & Skip to Level buttons */}
-      {!isWon && (
+      {/* 5a. DEV ONLY: See Map & Skip to Level (unlock: tap the version on Home 5×) */}
+      {devModeUnlocked && !run && !isWon && (
         <View style={styles.devRow} pointerEvents="box-none">
           <TouchableOpacity
             style={[styles.devButton, revealAll && styles.devButtonOn]}
@@ -801,7 +982,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               drawFrame(Date.now());
             }}
           >
-            <Text style={[styles.devButtonText, revealAll && { color: '#04121A' }]}>
+            <MapIcon size={16} color={revealAll ? '#E9A93F' : '#E6EAF0'} strokeWidth={2} />
+            <Text style={[styles.devButtonText, revealAll && { color: '#E9A93F' }]}>
               {revealAll ? 'HIDE MAP' : 'SEE MAP'}
             </Text>
           </TouchableOpacity>
@@ -813,6 +995,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               setShowDevPicker(true);
             }}
           >
+            <FastForward size={16} color="#E6EAF0" fill="#E6EAF0" strokeWidth={1.5} />
             <Text style={styles.devButtonText}>SKIP TO LEVEL</Text>
           </TouchableOpacity>
         </View>
@@ -838,16 +1021,45 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         <PauseOverlay
           levelNumber={level.id}
           levelTitle={level.name}
+          levelLabel={run ? `FLOOR ${run.floor}` : undefined}
           onResume={() => setIsPaused(false)}
           onRestart={initLevel}
           onMenu={onExitToMenu}
-          onSeeMap={() => {
-            revealAllRef.current = !revealAllRef.current;
-            setRevealAll(revealAllRef.current);
-            drawFrame(Date.now());
-          }}
-          onSkipLevel={() => setShowDevPicker(true)}
+          onSeeMap={
+            devModeUnlocked && !run
+              ? () => {
+                  revealAllRef.current = !revealAllRef.current;
+                  setRevealAll(revealAllRef.current);
+                  drawFrame(Date.now());
+                }
+              : undefined
+          }
+          onSkipLevel={devModeUnlocked && !run ? () => setShowDevPicker(true) : undefined}
           isMapRevealed={revealAll}
+        />
+      )}
+
+      {/* 6a. ENDLESS / DAILY run cards */}
+      {run && runCard && (
+        <RunOverlay
+          mode={run.mode}
+          kind={runCard.kind}
+          floor={runCard.floor}
+          floorShards={runCard.floorShards}
+          runShards={runCard.runShards}
+          best={runCard.best}
+          newBest={runCard.newBest}
+          onContinue={() => onRunAdvance?.({ ...run, floor: run.floor + 1, shards: runCard.runShards })}
+          onRetry={() => onRunRestart?.()}
+          onMenu={() => {
+            // leaving mid-run (after clearing a floor) still counts the depth reached
+            if (runCard.kind === 'cleared') {
+              const st = useProgressStore.getState();
+              if (run.mode === 'daily') st.recordDailyScore(runDay(run), run.floor);
+              else st.recordEndlessScore(run.floor);
+            }
+            onExitToMenu();
+          }}
         />
       )}
 
@@ -877,22 +1089,25 @@ const styles = StyleSheet.create({
   },
   devRow: {
     position: 'absolute',
-    top: 84,
-    right: 14,
+    top: 76,
+    right: 10,
     flexDirection: 'row',
     gap: 8,
     zIndex: 150,
   },
   devButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 194, 74, 0.6)',
-    backgroundColor: 'rgba(20, 14, 4, 0.85)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 26,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    borderWidth: 1.2,
+    borderColor: 'rgba(150, 162, 180, 0.55)',
+    backgroundColor: 'rgba(10, 13, 18, 0.92)',
   },
-  devButtonOn: { backgroundColor: '#FFC24A', borderColor: '#FFC24A' },
-  devButtonText: { color: '#FFC24A', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  devButtonOn: { borderColor: 'rgba(233, 169, 63, 0.8)' },
+  devButtonText: { color: '#E6EAF0', fontFamily: UI.font.techBold, fontSize: 11, letterSpacing: 0.8 },
   redStatic: {
     backgroundColor: PALETTE.wraithRed,
     opacity: 0.9,

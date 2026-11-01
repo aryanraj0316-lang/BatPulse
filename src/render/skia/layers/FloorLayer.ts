@@ -80,7 +80,7 @@ export function bakeFloor(c: SkCanvas, decor: LevelDecor, w: number, h: number, 
   // 2. Broad light/dark patches so the tiling never reads as repetitive
   const rng = makeRng(seed * 3 + 1);
   const patches = Math.round((w * h) / 9000);
-  const patchLight = radial('floorPatchL', [[0, '#3A4A5E', 1], [1, '#3A4A5E', 0]]);
+  const patchLight = radial('floorPatchL', [[0, THEME.floorPatchLight, 1], [1, THEME.floorPatchLight, 0]]);
   const patchDark = radial('floorPatchD', [[0, '#000000', 1], [1, '#000000', 0]]);
   for (let i = 0; i < patches; i++) {
     const r = rng.range(40, 120);
@@ -101,14 +101,14 @@ export function bakeFloor(c: SkCanvas, decor: LevelDecor, w: number, h: number, 
   draw(decor.pebblesLight, fill(ART.rockLight, 0.6));
   draw(decor.twigs, stroke(ART.twig, 0.9, 0.9, true));
   draw(decor.twigsLight, stroke(ART.twigLight, 0.8, 0.9, true));
-  draw(decor.litterDark, fill('#2B2416', 0.8));
-  draw(decor.litter, fill('#2E3F1C', 0.75));
+  draw(decor.litterDark, fill(THEME.litterDark, 0.8));
+  draw(decor.litter, fill(THEME.litter, 0.75));
 
   // 4. Flat decorative spike beds (dead ends only)
   for (const sb of decor.spikeBeds) drawSpikeBed(c, sb);
 
   // 5. Cool ambient wash over the whole floor
-  c.drawRect(rect(0, 0, w, h), fill('#28466E', 0.1));
+  c.drawRect(rect(0, 0, w, h), fill(THEME.floorWash, THEME.floorWashAlpha));
 }
 
 /** Iron plate with a dense grid of lit metal pyramid spikes (decorative). */
@@ -155,7 +155,7 @@ export function bakeBorder(c: SkCanvas, decor: LevelDecor, w: number, h: number)
   // edge darkness fades inward
   const fade = 26;
   const edge = (key: string, x0: number, y0: number, x1: number, y1: number, r: [number, number, number, number]) =>
-    c.drawRect(rect(...r), shaded(linear(key, x0, y0, x1, y1, [[0, '#020305', 0.9], [1, '#020305', 0]])));
+    c.drawRect(rect(...r), shaded(linear(key, x0, y0, x1, y1, [[0, THEME.edgeFade, 0.9], [1, THEME.edgeFade, 0]])));
   edge('bfL', 0, 0, fade, 0, [0, 0, fade, h]);
   edge(`bfR${w}`, w, 0, w - fade, 0, [w - fade, 0, fade, h]);
   edge(`bfB${h}`, 0, h, 0, h - fade, [0, h - fade, w, fade]);
@@ -174,9 +174,9 @@ export function bakeBorder(c: SkCanvas, decor: LevelDecor, w: number, h: number)
       [1, THEME.rockDark, 0.2],
     ])));
     const hl = svgPathOnce(rk.hl);
-    if (hl) c.drawPath(hl, fill('#5A6676', 0.35));
+    if (hl) c.drawPath(hl, fill(THEME.rockHighlight, 0.35));
   }
-  const tones = ['#14260F', '#1E3A17', '#2C5224', '#3F6E2E'];
+  const tones = THEME.borderLeaves;
   decor.borderLeaves.forEach((d, i) => {
     const p = svgPathOnce(d);
     if (!p) return;
@@ -190,5 +190,5 @@ export function bakeBorder(c: SkCanvas, decor: LevelDecor, w: number, h: number)
   });
   // glossy sheen on the lightest leaves
   const top = svgPathOnce(decor.borderLeaves[3]);
-  if (top) c.drawPath(top, stroke('#9CCB6A', 0.5, 0.35));
+  if (top) c.drawPath(top, stroke(THEME.borderLeafSheen, 0.5, 0.35));
 }

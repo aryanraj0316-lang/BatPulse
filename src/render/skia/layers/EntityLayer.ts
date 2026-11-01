@@ -10,7 +10,7 @@ import { fill, stroke, shaded, svgPathOnce, mix, linear, additive, blurred, radi
  */
 
 /** Forward-facing red wedge from an enemy, feathered, tinting the floor. Drawn under the enemy bat. */
-export function drawVisionCone(c: SkCanvas, x: number, y: number, deg: number, alpha: number, t: number, frenzy: boolean) {
+export function drawVisionCone(c: SkCanvas, x: number, y: number, deg: number, alpha: number, t: number, frenzy: boolean, lenScale = 1) {
   const L = THEME.coneLength;
   const half = (THEME.coneHalfAngleDeg * Math.PI) / 180;
   const sx = Math.sin(half) * L;
@@ -26,6 +26,7 @@ export function drawVisionCone(c: SkCanvas, x: number, y: number, deg: number, a
   c.save();
   c.translate(x, y);
   c.rotate(deg, 0, 0);
+  if (lenScale !== 1) c.scale(lenScale, lenScale);
   // red light falling on the floor (additive), then the feathered wedge itself
   c.drawPath(wedge, additive(shaded(grad, 0.45 * alpha * pulse)));
   c.drawPath(wedge, shaded(grad, alpha * pulse));

@@ -1,12 +1,15 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions } from 'react-native';
-import Svg, { Path, Circle, Defs, RadialGradient, Stop, G, ClipPath, Rect } from 'react-native-svg';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions, LayoutChangeEvent } from 'react-native';
+import Svg, { Path, Circle, Defs, RadialGradient, LinearGradient, Stop, G, ClipPath, Rect } from 'react-native-svg';
 import { Timer, Zap, Pause } from 'lucide-react-native';
 import { ART } from '../render/art/kit';
+import { UI } from '../ui/theme';
 
 interface HUDProps {
   levelTitle: string;
   levelNumber: number;
+  /** replaces "ECHO n" (e.g. "FLOOR 4" in Endless) */
+  levelLabel?: string;
   sonarRemaining: number;
   maxSonar: number;
   elapsedSeconds: number;
@@ -20,14 +23,27 @@ interface HUDProps {
   keyState?: number;
 }
 
-// Narrow phones get shorter labels so the bar never overflows.
-const COMPACT = Dimensions.get('window').width < 430;
+// Narrow phones get tighter spacing so the bar never overflows.
+const COMPACT = Dimensions.get('window').width < 400;
+
+const BAR_H = 46;
+const EMBLEM = 50;
+
+const C = {
+  text: '#F2F4F7',
+  dim: '#8E9BB0',
+  sonar: '#7CC0FF',
+  gold: '#E9A93F',
+  dotOff: '#4A4F58',
+  steel: '#5E6876',
+  steelDark: '#22272F',
+};
 
 const BAT_EMBLEM_D =
   'M15,4.5 L13.6,1.5 L13.2,4.6 C11.5,4.8 10.6,6.2 10.4,7.4 C8.8,5.2 5.6,3.6 0.5,4.2 C3,5.6 3.6,7.6 3.4,9.4 C5,8.6 6.6,9 7.4,10.4 C8.8,9.8 10.4,10.4 11.2,12 C12.4,12.4 13.6,14.4 15,17 C16.4,14.4 17.6,12.4 18.8,12 C19.6,10.4 21.2,9.8 22.6,10.4 C23.4,9 25,8.6 26.6,9.4 C26.4,7.6 27,5.6 29.5,4.2 C24.4,3.6 21.2,5.2 19.6,7.4 C19.4,6.2 18.5,4.8 16.8,4.6 L16.4,1.5 Z';
 
 const SonarIcon: React.FC<{ color: string }> = ({ color }) => (
-  <Svg width={20} height={20} viewBox="0 0 20 20">
+  <Svg width={22} height={22} viewBox="0 0 20 20">
     <Circle cx={4} cy={10} r={2} fill={color} />
     <Path d="M8,5.5 A6,6 0 0 1 8,14.5" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" />
     <Path d="M11.5,2.5 A10,10 0 0 1 11.5,17.5" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.75} />
@@ -35,28 +51,25 @@ const SonarIcon: React.FC<{ color: string }> = ({ color }) => (
   </Svg>
 );
 
-/** Thin glowing segmented bar. `fill` is 0..segments (fractional = partial segment). */
-const SegBar: React.FC<{ segments: number; fill: number; color: string; glow: Animated.Value; width: number }> = ({
-  segments,
-  fill,
-  color,
-  glow,
-  width,
-}) => (
-  <View style={[styles.segRow, { width }]}>
-    {Array.from({ length: segments }).map((_, i) => {
+/** Row of small round pips. `fill` is 0..count (fractional = dimmer partial pip). */
+const Dots: React.FC<{ count: number; fill: number; color: string; glow: Animated.Value }> = ({ count, fill, color, glow }) => (
+  <View style={styles.dotRow}>
+    {Array.from({ length: count }).map((_, i) => {
       const amt = Math.max(0, Math.min(1, fill - i));
       return (
-        <View key={i} style={styles.seg}>
+        <View key={i} style={styles.dot}>
           {amt > 0 && (
             <Animated.View
               style={[
-                styles.segFill,
+                StyleSheet.absoluteFill,
                 {
-                  width: `${amt * 100}%`,
+                  borderRadius: 3,
                   backgroundColor: color,
                   shadowColor: color,
-                  opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }),
+                  shadowOpacity: 0.9,
+                  shadowRadius: 3,
+                  shadowOffset: { width: 0, height: 0 },
+                  opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.75 * amt + 0.1, amt] }),
                 },
               ]}
             />
@@ -67,9 +80,20 @@ const SegBar: React.FC<{ segments: number; fill: number; color: string; glow: An
   </View>
 );
 
+/** Chamfered metal bar outline. */
+const barPath = (w: number, h: number, inset: number) => {
+  const a = 10 - inset * 0.5; // chamfer size
+  const x0 = inset;
+  const y0 = inset;
+  const x1 = w - inset;
+  const y1 = h - inset;
+  return `M${x0 + a},${y0}H${x1 - a}L${x1},${y0 + a}V${y1 - a}L${x1 - a},${y1}H${x0 + a}L${x0},${y1 - a}V${y0 + a}Z`;
+};
+
 export const HUD: React.FC<HUDProps> = React.memo(
-  ({ levelTitle, levelNumber, sonarRemaining, maxSonar, elapsedSeconds, momentum, isFrenzy, onPause, reloadProgress = -1, keyState = 0 }) => {
+  ({ levelTitle, levelNumber, levelLabel, sonarRemaining, maxSonar, elapsedSeconds, momentum, isFrenzy, onPause, reloadProgress = -1, keyState = 0 }) => {
     const glow = useRef(new Animated.Value(0)).current;
+    const [barW, setBarW] = useState(0);
     useEffect(() => {
       const loop = Animated.loop(
         Animated.sequence([
@@ -86,62 +110,43 @@ export const HUD: React.FC<HUDProps> = React.memo(
     const time = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     const isInfinite = maxSonar >= 999;
     const multiplier = (1.0 + momentum * 0.1).toFixed(1);
-    const accent = isFrenzy ? ART.wraithRed : ART.cyan;
+    const sonarColor = isFrenzy ? ART.wraithRed : C.sonar;
+    const sonarDots = isInfinite ? 4 : Math.min(maxSonar, 8);
+    const momentumFill = Math.max(1, Math.min(4, (momentum / 20) * 4));
+
+    const onLayout = (e: LayoutChangeEvent) => setBarW(Math.round(e.nativeEvent.layout.width));
 
     return (
       <View style={styles.container} pointerEvents="box-none">
-        <Animated.View
-          style={[
-            styles.glowRim,
-            { borderColor: accent, opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.6] }) },
-          ]}
-          pointerEvents="none"
-        />
-        <View style={[styles.pill, { borderColor: isFrenzy ? ART.wraithRed : 'rgba(97, 217, 255, 0.6)' }]}>
-          {/* Emblem */}
-          <View style={styles.emblem}>
-            <Svg width={40} height={40}>
+        {/* Metal bar */}
+        <View style={styles.bar} onLayout={onLayout}>
+          {barW > 0 && (
+            <Svg width={barW} height={BAR_H} style={StyleSheet.absoluteFill}>
               <Defs>
-                <RadialGradient id="hudEmblem" cx="50%" cy="40%" r="60%">
-                  <Stop offset="0" stopColor="#2A2414" />
-                  <Stop offset="1" stopColor="#07090D" />
-                </RadialGradient>
+                <LinearGradient id="hudBar" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#1C222B" />
+                  <Stop offset="0.55" stopColor="#10141A" />
+                  <Stop offset="1" stopColor="#0A0D12" />
+                </LinearGradient>
+                <LinearGradient id="hudRim" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#8893A2" />
+                  <Stop offset="0.5" stopColor={C.steel} />
+                  <Stop offset="1" stopColor="#2C323B" />
+                </LinearGradient>
               </Defs>
-              <Circle cx={20} cy={20} r={19} fill="url(#hudEmblem)" stroke={ART.gold} strokeWidth={1.2} strokeOpacity={0.7} />
-              {reloadProgress < 0 ? (
-                <G transform="translate(5,11)">
-                  <Path d={BAT_EMBLEM_D} fill={ART.gold} />
-                </G>
-              ) : (
-                <>
-                  {/* sonar recharging: the bat fills with gold from bottom to top */}
-                  <Defs>
-                    <ClipPath id="hudReloadClip">
-                      <Rect x={0} y={11 + 17 * (1 - reloadProgress)} width={40} height={17 * reloadProgress + 1} />
-                    </ClipPath>
-                  </Defs>
-                  <G transform="translate(5,11)">
-                    <Path d={BAT_EMBLEM_D} fill="#3A3424" />
-                  </G>
-                  <G clipPath="url(#hudReloadClip)">
-                    <G transform="translate(5,11)">
-                      <Path d={BAT_EMBLEM_D} fill={ART.gold} />
-                    </G>
-                  </G>
-                  <Circle cx={20} cy={20} r={19} fill="none" stroke={ART.cyan} strokeWidth={1.2} strokeOpacity={0.55} />
-                </>
-              )}
+              <Path d={barPath(barW, BAR_H, 1)} fill="url(#hudBar)" stroke={isFrenzy ? ART.wraithRed : 'url(#hudRim)'} strokeWidth={2} />
+              <Path d={barPath(barW, BAR_H, 4)} fill="none" stroke="#000000" strokeOpacity={0.55} strokeWidth={1} />
             </Svg>
-          </View>
+          )}
 
           {/* Level */}
           <View style={styles.titleCol}>
             <View style={styles.row}>
-              <Text style={styles.level} numberOfLines={1}>ECHO {levelNumber}</Text>
+              <Text style={styles.level} numberOfLines={1}>{levelLabel ?? `ECHO ${levelNumber}`}</Text>
               {keyState > 0 && (
                 <Svg width={14} height={14} viewBox="0 0 14 14" style={{ marginLeft: 5 }}>
-                  <Circle cx={4.5} cy={4.5} r={3} stroke={keyState === 2 ? ART.gold : '#4B5563'} strokeWidth={1.6} fill="none" />
-                  <Path d="M6.7,6.7L12.5,12.5M10,10L11.6,8.4M11.6,11.6L13,10.2" stroke={keyState === 2 ? ART.gold : '#4B5563'} strokeWidth={1.6} strokeLinecap="round" />
+                  <Circle cx={4.5} cy={4.5} r={3} stroke={keyState === 2 ? C.gold : '#4B5563'} strokeWidth={1.8} fill="none" />
+                  <Path d="M6.7,6.7L12.5,12.5M10,10L11.6,8.4M11.6,11.6L13,10.2" stroke={keyState === 2 ? C.gold : '#4B5563'} strokeWidth={1.8} strokeLinecap="round" />
                 </Svg>
               )}
             </View>
@@ -154,7 +159,7 @@ export const HUD: React.FC<HUDProps> = React.memo(
 
           {/* Time */}
           <View style={styles.row}>
-            <Timer size={COMPACT ? 15 : 18} color="#E6EEF6" strokeWidth={2} />
+            <Timer size={COMPACT ? 17 : 20} color={C.text} strokeWidth={1.8} />
             <View style={styles.statCol}>
               <Text style={styles.label}>TIME</Text>
               <Text style={styles.value}>{time}</Text>
@@ -165,17 +170,16 @@ export const HUD: React.FC<HUDProps> = React.memo(
 
           {/* Sonar */}
           <View style={styles.row}>
-            <SonarIcon color={accent} />
+            <SonarIcon color={sonarColor} />
             <View style={styles.statCol}>
-              <Text style={[styles.label, { color: accent, fontWeight: '800' }]} numberOfLines={1}>
-                {isFrenzy ? 'FRENZY!' : isInfinite ? 'SONAR ∞' : COMPACT ? `SONAR ${sonarRemaining}/${maxSonar}` : `SONAR: ${sonarRemaining} / ${maxSonar}`}
+              <Text style={[styles.label, { color: sonarColor }]} numberOfLines={1}>
+                {isFrenzy ? 'FRENZY!' : isInfinite ? 'SONAR ∞' : `SONAR ${sonarRemaining}/${maxSonar}`}
               </Text>
-              <SegBar
-                segments={isInfinite ? 4 : Math.min(maxSonar, 8)}
-                fill={isInfinite ? 4 : (sonarRemaining / maxSonar) * Math.min(maxSonar, 8)}
-                color={accent}
+              <Dots
+                count={sonarDots}
+                fill={isInfinite ? 4 : (sonarRemaining / maxSonar) * sonarDots}
+                color={sonarColor}
                 glow={glow}
-                width={COMPACT ? 40 : 48}
               />
             </View>
           </View>
@@ -184,22 +188,64 @@ export const HUD: React.FC<HUDProps> = React.memo(
 
           {/* Momentum */}
           <View style={styles.row}>
-            <Zap size={15} color={ART.gold} fill={ART.gold} />
+            <Zap size={COMPACT ? 17 : 20} color={C.gold} fill={C.gold} strokeWidth={1} />
             <View style={styles.statCol}>
-              <Text style={[styles.label, { color: ART.gold, fontWeight: '800' }]} numberOfLines={1}>
-                {COMPACT ? `MOMENTUM` : `MOMENTUM ×${multiplier}`}
+              <Text style={[styles.label, { color: C.gold }]} numberOfLines={1}>
+                MOMENTUM
               </Text>
-              <View style={[styles.row, { flexWrap: 'nowrap' }]}>
-                <SegBar segments={4} fill={Math.max(0.35, (momentum / 20) * 4)} color={ART.gold} glow={glow} width={COMPACT ? 30 : 52} />
-                {COMPACT && <Text style={styles.mult}>×{multiplier}</Text>}
+              <View style={styles.row}>
+                <Dots count={4} fill={momentumFill} color={C.gold} glow={glow} />
+                <Text style={styles.mult}>x{multiplier}</Text>
               </View>
             </View>
           </View>
 
           {/* Pause */}
           <TouchableOpacity style={styles.pause} onPress={onPause} activeOpacity={0.7} hitSlop={8}>
-            <Pause size={16} color="#E6EEF6" fill="#E6EEF6" />
+            <Pause size={14} color="#E4D3B0" fill="#E4D3B0" strokeWidth={1} />
           </TouchableOpacity>
+        </View>
+
+        {/* Bat emblem, overlapping the bar's left end */}
+        <View style={styles.emblem} pointerEvents="none">
+          <Svg width={EMBLEM} height={EMBLEM}>
+            <Defs>
+              <RadialGradient id="hudEmblem" cx="50%" cy="40%" r="60%">
+                <Stop offset="0" stopColor="#2A2416" />
+                <Stop offset="1" stopColor="#07090D" />
+              </RadialGradient>
+              <LinearGradient id="hudEmblemRim" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#C7A26A" />
+                <Stop offset="0.5" stopColor="#6E5432" />
+                <Stop offset="1" stopColor="#3A2C1A" />
+              </LinearGradient>
+            </Defs>
+            <Circle cx={EMBLEM / 2} cy={EMBLEM / 2} r={EMBLEM / 2 - 1} fill="#14171C" stroke="#4E5662" strokeWidth={1.5} />
+            <Circle cx={EMBLEM / 2} cy={EMBLEM / 2} r={EMBLEM / 2 - 5} fill="url(#hudEmblem)" stroke="url(#hudEmblemRim)" strokeWidth={2.5} />
+            {reloadProgress < 0 ? (
+              <G transform={`translate(${EMBLEM / 2 - 15 * 1.05},${EMBLEM / 2 - 9.5 * 1.05}) scale(1.05)`}>
+                <Path d={BAT_EMBLEM_D} fill="#D9A55A" />
+              </G>
+            ) : (
+              <>
+                {/* sonar recharging: the bat fills with gold from bottom to top */}
+                <Defs>
+                  <ClipPath id="hudReloadClip">
+                    <Rect x={0} y={15 + 18 * (1 - reloadProgress)} width={EMBLEM} height={18 * reloadProgress + 1} />
+                  </ClipPath>
+                </Defs>
+                <G transform={`translate(${EMBLEM / 2 - 15 * 1.05},${EMBLEM / 2 - 9.5 * 1.05}) scale(1.05)`}>
+                  <Path d={BAT_EMBLEM_D} fill="#3A3424" />
+                </G>
+                <G clipPath="url(#hudReloadClip)">
+                  <G transform={`translate(${EMBLEM / 2 - 15 * 1.05},${EMBLEM / 2 - 9.5 * 1.05}) scale(1.05)`}>
+                    <Path d={BAT_EMBLEM_D} fill="#D9A55A" />
+                  </G>
+                </G>
+                <Circle cx={EMBLEM / 2} cy={EMBLEM / 2} r={EMBLEM / 2 - 5} fill="none" stroke={C.sonar} strokeWidth={1.4} strokeOpacity={0.6} />
+              </>
+            )}
+          </Svg>
         </View>
       </View>
     );
@@ -209,76 +255,98 @@ export const HUD: React.FC<HUDProps> = React.memo(
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 10,
-    left: 8,
-    right: 8,
+    top: 12,
+    left: 4,
+    right: 4,
+    height: EMBLEM,
+    justifyContent: 'center',
     zIndex: 100,
   },
-  glowRim: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: 30,
-    borderWidth: 3,
-    margin: -2,
-  },
-  pill: {
+  bar: {
+    height: BAR_H,
+    marginLeft: EMBLEM * 0.42,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 10, 18, 0.9)',
-    borderRadius: 28,
-    borderWidth: 1.2,
-    paddingLeft: 6,
-    paddingRight: 6,
-    paddingVertical: 6,
-    shadowColor: ART.cyan,
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
+    paddingLeft: EMBLEM * 0.58 + 6,
+    paddingRight: 5,
+    shadowColor: '#000',
+    shadowOpacity: 0.7,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 10,
   },
   emblem: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: EMBLEM,
+    height: EMBLEM,
+    elevation: 11,
+    zIndex: 2,
   },
   titleCol: {
     flexShrink: 1,
     flexGrow: 1,
-    marginLeft: 6,
     minWidth: 0,
   },
   row: { flexDirection: 'row', alignItems: 'center' },
-  level: { color: '#F2F7FB', fontSize: COMPACT ? 11 : 12, flexShrink: 0, fontWeight: '800', letterSpacing: 0.5 },
-  levelName: { color: '#8FA3B8', fontSize: 7.5, fontWeight: '600', letterSpacing: 0.8, marginTop: 1 },
-  divider: { width: 1, height: 26, backgroundColor: 'rgba(143, 163, 184, 0.25)', marginHorizontal: COMPACT ? 4 : 6 },
-  statCol: { marginLeft: 4 },
-  label: { color: '#8FA3B8', fontSize: 7.5, fontWeight: '700', letterSpacing: 0.4 },
-  value: { color: '#F2F7FB', fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  segRow: { flexDirection: 'row', gap: 2.5, marginTop: 3 },
-  seg: {
-    flex: 1,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(143, 163, 184, 0.18)',
-    overflow: 'hidden',
+  level: {
+    color: C.text,
+    fontFamily: UI.font.techBold,
+    fontSize: COMPACT ? 13 : 15,
+    flexShrink: 0,
+    letterSpacing: 0.4,
   },
-  segFill: {
-    height: '100%',
-    borderRadius: 3,
-    shadowOpacity: 0.9,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
+  levelName: {
+    color: C.dim,
+    fontFamily: UI.font.techBold,
+    fontSize: COMPACT ? 8.5 : 9.5,
+    letterSpacing: 0.6,
+    marginTop: -1,
   },
-  mult: { color: ART.gold, fontSize: 9, fontWeight: '800', marginLeft: 3, marginTop: 2 },
+  divider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(143, 155, 176, 0.22)',
+    marginHorizontal: COMPACT ? 5 : 8,
+  },
+  statCol: { marginLeft: COMPACT ? 3 : 5 },
+  label: {
+    color: C.dim,
+    fontFamily: UI.font.techBold,
+    fontSize: COMPACT ? 8 : 9,
+    letterSpacing: 0.4,
+  },
+  value: {
+    color: C.text,
+    fontFamily: UI.font.techBold,
+    fontSize: COMPACT ? 15 : 17,
+    marginTop: -2,
+    fontVariant: ['tabular-nums'],
+  },
+  dotRow: { flexDirection: 'row', gap: COMPACT ? 2 : 2.5, marginTop: 3 },
+  dot: {
+    width: COMPACT ? 4.5 : 5,
+    height: COMPACT ? 4.5 : 5,
+    borderRadius: 3,
+    backgroundColor: C.dotOff,
+  },
+  mult: {
+    color: C.gold,
+    fontFamily: UI.font.techBold,
+    fontSize: COMPACT ? 9 : 10,
+    marginLeft: 4,
+    marginTop: 2,
+  },
   pause: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(230, 238, 246, 0.25)',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    borderColor: '#5E6876',
+    backgroundColor: '#0B0E13',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 6,
+    marginLeft: COMPACT ? 5 : 8,
   },
 });

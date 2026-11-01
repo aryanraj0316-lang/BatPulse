@@ -30,7 +30,9 @@ export type EnvObjectType =
   | 'resonance_gate'
   | 'pressure_plate'
   | 'moving_wall'
-  | 'key';
+  | 'key'
+  /** linked portal pair (levels 51+): fly in one, come out of the other */
+  | 'rift';
 
 export interface EnvObject extends Rect, Revealable {
   type: EnvObjectType;
@@ -43,6 +45,10 @@ export interface EnvObject extends Rect, Revealable {
   travelDistance?: number;
   axis?: 'horizontal' | 'vertical';
   initialPos?: Vec2;
+  /** moving walls: ms offset into the sweep cycle (so crushers don't move in lockstep) */
+  phaseOffset?: number;
+  /** rifts: id of the linked rift */
+  pairId?: string;
   // Pressure plate / Echo crystal triggers
   triggerRadius?: number;
   collected?: boolean;
@@ -76,6 +82,8 @@ export interface WraithEntity {
   repathAt: number;
   /** last time (ms) a hunting enemy saw or sensed the bat */
   lastSeenAt?: number;
+  /** vision range multiplier (skins can shorten it) */
+  visionScale?: number;
   /** idle patrol: the cell it is drifting to, and when it may move again */
   patrolTarget?: { col: number; row: number } | null;
   pauseUntil?: number;
@@ -119,6 +127,8 @@ export interface RevealZone {
   intensity: number;
   /** pulses the bat fires travel with the bat */
   followsPlayer?: boolean;
+  /** ms the area stays fully lit after expanding (default REVEAL_HOLD_MS) */
+  hold?: number;
 }
 
 export interface ImpactSpark {
@@ -240,6 +250,7 @@ export type GameScreenState =
   | 'ABILITIES'
   | 'SETTINGS'
   | 'ENDLESS'
-  | 'HOW_TO_PLAY';
+  | 'HOW_TO_PLAY'
+  | 'SKINS';
 
 export type PlayOutcome = 'VICTORY' | 'CAUGHT_BY_WRAITH' | 'CHASM_FALL' | 'OUT_OF_PULSES';

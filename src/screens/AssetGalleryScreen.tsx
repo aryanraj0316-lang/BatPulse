@@ -36,6 +36,8 @@ import { drawLaser, drawEnergyCore, drawCrystalHQ, drawWater, drawGrateHQ } from
 import { drawSpikeBed } from '../render/skia/layers/FloorLayer';
 import { drawLanternFixture, drawBatAura } from '../render/skia/layers/LightingLayer';
 import type { SkCanvas } from '@shopify/react-native-skia';
+import { SKINS } from '../skins/skins';
+import { drawCrusher, drawCrusherBeacon, drawRift } from '../render/skia/layers/TwistLayer';
 
 const S = 120;
 const GAP = 14;
@@ -60,6 +62,43 @@ export const AssetGalleryScreen: React.FC = () => {
 
   const tiles: Tile[] = useMemo(
     () => [
+      // every bat skin, flying, with a sonar call every few seconds
+      ...SKINS.map((sk) => ({
+        label: `Skin: ${sk.name}`,
+        draw: (c: SkCanvas, t: number) => {
+          const ping = t % 2600;
+          drawBatRig(c, {
+            key: `gallery|${sk.id}`,
+            x: 60,
+            y: 62,
+            deg: Math.sin(t * 0.0008) * 12,
+            k: 2.3,
+            phase: t * 0.019,
+            t,
+            variant: 'player',
+            bank: Math.sin(t * 0.0008 + 1) * 0.3,
+            amp: 0.95,
+            glide: 0,
+            speed: 0.6,
+            react: { pingK: ping < 320 ? 1 - ping / 320 : 0, bumpK: 0, pickupK: 0, fear: 0 },
+            skin: sk,
+          });
+        },
+      })),
+      {
+        label: 'Crusher (twist 41+)',
+        draw: (c: SkCanvas, t: number) => {
+          const o = { id: 'g_crush', type: 'moving_wall' as const, x: 54, y: 16, width: 13, height: 88, axis: 'vertical' as const, cycleDuration: 3000, phaseOffset: 0, revealedAt: 0, revealStrength: 0, lastPingDistance: 0 };
+          c.drawRect(Skia.XYWHRect(20, 8, 80, 8), fill('#3A4454'));
+          c.drawRect(Skia.XYWHRect(20, 104, 80, 8), fill('#3A4454'));
+          drawCrusher(c, o, t, '#E07CFF');
+          drawCrusherBeacon(c, o, t, '#E07CFF');
+        },
+      },
+      {
+        label: 'Rift portal (twist 51+)',
+        draw: (c: SkCanvas, t: number) => drawRift(c, { id: 'g_rift_a', type: 'rift', x: 30, y: 30, width: 60, height: 60, revealedAt: 0, revealStrength: 0, lastPingDistance: 0 }, t, 0, false),
+      },
       {
         label: 'Player bat (flying)',
         draw: (c, t) => {

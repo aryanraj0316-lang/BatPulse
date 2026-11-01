@@ -28,7 +28,7 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     parSonar: 3,
     hunterCount: 0,
     difficulty: 1,
-    hint: 'Tap anywhere in the darkness to emit your first sonar pulse.',
+    hint: 'Tap anywhere to send a sonar pulse. Its echo lights up the walls.',
   },
   {
     id: 2,
@@ -43,7 +43,7 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     parSonar: 5,
     hunterCount: 0,
     difficulty: 1,
-    hint: 'Use the floating joystick to glide smoothly through corridors.',
+    hint: 'Hold or drag anywhere to steer. A joystick appears under your thumb.',
   },
   {
     id: 3,
@@ -58,7 +58,7 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     parSonar: 4,
     hunterCount: 0,
     difficulty: 2,
-    hint: 'Trust your decaying memory afterimage before firing another pulse.',
+    hint: 'Pulses are limited. Remember the walls you saw before pulsing again.',
   },
   {
     id: 4,
@@ -73,7 +73,7 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     parSonar: 5,
     hunterCount: 1,
     difficulty: 2,
-    hint: 'A blind predator shares the maze. It hears every pulse you emit.',
+    hint: 'A wraith patrols this maze. Stay out of its red cone of sight.',
   },
   {
     id: 5,
@@ -88,7 +88,7 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     parSonar: 4,
     hunterCount: 1,
     difficulty: 3,
-    hint: 'Chasms return no echo. Fear silence just as much as walls.',
+    hint: 'Chasms swallow your echo. Dark gaps in the floor are deadly.',
   },
   {
     id: 6,
@@ -103,7 +103,7 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     parSonar: 4,
     hunterCount: 1,
     difficulty: 3,
-    hint: 'Stand completely still to stay inaudible while the Wraith patrols.',
+    hint: 'Wraiths also sense a bat that flies too close. Give them room.',
   },
   {
     id: 7,
@@ -135,4 +135,35 @@ export const LEVEL_PRESETS: LevelPreset[] = [
     difficulty: 5,
     hint: 'Fire into Echo Crystals to reveal distant chambers for free.',
   },
+];
+
+/** Names for the generated campaign levels 9–60 (index 0 = level 9). */
+export const LEVEL_NAMES: string[] = [
+  // I · The Ivy Crypt
+  'Moss & Marrow', 'The Lantern Keeper',
+  // II · The Sunken Grotto
+  'Tidepool Hall', 'Drowned Choir', 'Barnacle Run', 'The Pearl Vault', 'Kelp Cathedral',
+  'Glimmer Shoals', "Siren's Hollow", 'Coral Labyrinth', 'The Abyssal Gate', "Leviathan's Rest",
+  // III · The Ember Forge
+  'Cinder Steps', 'The Bellows', 'Slag Rivers', 'Anvil Hall', 'Ashen Gallery',
+  'Magma Veins', 'The Crucible Deep', 'Obsidian Spire', 'Furnace Heart', 'Molten Throne',
+  // IV · The Frostbound Catacombs
+  'Rime Gate', 'Hoarfrost Crypts', 'The Frozen Choir', 'Glacier Vaults', 'Shiver Halls',
+  'Icebound Ossuary', 'Aurora Steps', 'The Silent Thaw', "Winter's Tomb", 'Heart of Ice',
+  // V · The Fungal Hollow
+  'Sporefall', 'Mycelium Maze', 'The Glowcap Grove', 'Rotwood Hollow', 'Lantern Shrooms',
+  'The Breathing Dark', 'Puffball Plaza', 'Root Cathedral', 'Bloom of Ruin', 'The Grand Mycelium',
+  // VI · The Astral Sanctum
+  'Stardust Steps', 'Celestial Nave', 'The Orrery', 'Constellation Halls', 'Nebula Gardens',
+  'The Eclipse Vault', "Comet's Path", 'Starfall Sanctum', 'The Last Light', 'Throne of Echoes',
+];
+
+/** One hint per chapter (index = chapter 0..5). Twist chapters explain their twist. */
+export const CHAPTER_HINTS: string[] = [
+  'Plan several moves ahead. Wraiths watch every corridor.',
+  'Jellyfish drift over the drowned halls. The deep pools still kill.',
+  'Lava pools are deadly. Follow the glowing seams.',
+  'The ice muffles everything. Pulse with care.',
+  'Crushers sweep the corridors. Watch their glow, then time your dash.',
+  'Rifts link distant halls. Fly into one and come out of its twin.',
 ];
